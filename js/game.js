@@ -647,6 +647,7 @@ function howToText() {
 }
 function showOverlay(kind, data) {
   el.overlay.classList.remove("hidden");
+  el.overlay.scrollTop = 0; // each screen starts at the top, not wherever the last one left off
   el.card.classList.toggle("wide", kind === "select" || kind === "flavors");
   if (kind === "select") {
     const cardHtml = CHAR_IDS.map((id, i) => {
