@@ -107,14 +107,26 @@ const starGeo = new THREE.BufferGeometry();
 const starMat = new THREE.PointsMaterial({ color: 0xdfe8ff, size: 1.4, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
 scene.add(new THREE.Points(starGeo, starMat));
 
-// Drops logo floating in the far sky (brand beacon; fog-free so it reads at distance)
+// Drops logo floating in the far sky (brand beacon; fog-free so it reads at
+// distance). Azimuth drifts to follow wherever the camera is currently
+// looking — a logo fixed at one absolute world bearing would end up out of
+// frame the moment the player turns, since the mouse now free-orbits.
+// Height is a fixed constant rather than projected along the camera's own
+// downward-tilted view ray (that blows up: at 200 units out, even the
+// default camera tilt sends a ray-projected point tens of units underwater).
+// H=0 was picked empirically — it's the height that stays inside the
+// vertical FOV across the full normal look-around pitch range (tested
+// -0.3..0.5 rad) with the most margin; only an unusually steep downward
+// look (>~0.5 rad, closer to staring at your own feet) loses it, which
+// reads as reasonable (you don't see the sky staring at the ground).
 let logoSprite = null;
+let logoYaw = 0.6;
+const LOGO_DIST = 200, LOGO_H = 0;
 {
   new THREE.TextureLoader().load("./assets/img/drops-logo.png", tex => {
     tex.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9, fog: false, depthWrite: false });
     logoSprite = new THREE.Sprite(m);
-    logoSprite.position.set(120, 64, -160);
     logoSprite.scale.set(52, 52 * 461 / 1103, 1);
     scene.add(logoSprite);
   });
@@ -946,6 +958,20 @@ function present(realDt) {
   const phase = (simT % CFG.dayLen) / CFG.dayLen;
   updateSky(phase);
 
+  // logo eases toward the camera's current bearing so it reliably drifts
+  // back into frame instead of staying lost behind the player
+  if (logoSprite) {
+    let d = camYaw - logoYaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    logoYaw += d * Math.min(1, 0.8 * realDt);
+    // negated: sin/cos(yaw) is the camera's OFFSET direction (behind the
+    // player); the logo sits where the camera actually looks (through the
+    // player and onward), the opposite way
+    const fx = -Math.sin(logoYaw), fz = -Math.cos(logoYaw);
+    logoSprite.position.set(px + fx * LOGO_DIST, LOGO_H, pz + fz * LOGO_DIST);
+  }
+
   if (state === "select") {
     // heroes idling on the meadow behind the picker cards
     const t = performance.now() * 0.001;
@@ -1160,6 +1186,18 @@ if (DEV || SMOKE) {
     show: () => { showT = CFG.showLen; showFxT = 0; },
     dance: () => { danceT = CFG.danceLen; confettiT = 0; },
     kill: () => { bar = 0.01; }, // next sim step triggers game over
+    debug: () => {
+      let local = null, inView = null;
+      if (logoSprite) {
+        const p = logoSprite.position.clone();
+        camera.worldToLocal(p); // three.js camera looks down -z
+        local = p.toArray();
+        const vFov = camera.fov * Math.PI / 180, hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+        inView = p.z < 0 && Math.abs(Math.atan2(p.x, -p.z)) < hFov / 2 && Math.abs(Math.atan2(p.y, -p.z)) < vFov / 2;
+      }
+      return { camYaw, camPitch, logoYaw, logoPos: logoSprite ? logoSprite.position.toArray() : null, camPos: camera.position.toArray(), px, pz, local, inView,
+        opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor };
+    },
     magnet: () => { // teleport onto the nearest active gummy (capture test)
       let bi = -1, bd = 1e9;
       for (let i = 0; i < nodePts.length; i++) {
