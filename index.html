@@ -6,8 +6,21 @@
 <title>Drops Adventure</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@600&family=Baloo+2:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&display=swap" rel="stylesheet">
 <style>
+  /* Work Sans — self-hosted from the real dropscandies.com CDN for brand
+     parity. Note: the files at this URL are Regular (400), not Semibold
+     (600) despite the original spec — see assets/fonts/README. Using the
+     real weight avoids the browser synthetically (fake-)bolding a weight
+     that doesn't actually exist in the file, which looks noticeably worse
+     than a true semibold cut. Swap in a real 600 file the same way if one
+     becomes available. */
+  @font-face {
+    font-family: "Work Sans";
+    src: url("./assets/fonts/worksans_n4.woff2") format("woff2"),
+         url("./assets/fonts/worksans_n4.woff") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
   /* Formiga (700) is a licensed commercial font (TipoType) — drop the webfont
      files in assets/fonts/ using these exact names and it takes over
      automatically. Until then, Baloo 2 stands in as a similarly bold,
@@ -20,7 +33,7 @@
   }
   html, body { margin:0; height:100%; overflow:hidden; background:#1a1030;
     font-family: "Work Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-    font-weight: 600;
+    font-weight: 400;
     touch-action:none; overscroll-behavior:none; -webkit-user-select:none; }
   /* Formiga 700 — product names & descriptions (game title, hero cards,
      gummy flavor names/effects, capture toast) */
@@ -34,7 +47,7 @@
     border:1.5px solid rgba(255,255,255,.45); border-radius:16px; backdrop-filter: blur(8px);
     color:#fff; box-shadow:0 4px 22px rgba(120,30,120,.28); }
   #stats { position:absolute; top:14px; right:14px; padding:10px 16px; font-size:14px;
-    line-height:1.55; text-align:right; letter-spacing:.04em; font-weight:600;
+    line-height:1.55; text-align:right; letter-spacing:.04em; font-weight:400;
     text-shadow:0 1px 4px rgba(80,0,60,.4); }
   #stats b { color:#fff45e; font-variant-numeric:tabular-nums; }
   #cycle { position:absolute; top:14px; left:14px; padding:10px 16px; font-size:12px;
@@ -66,7 +79,7 @@
     background:linear-gradient(92deg,#8dc63f 5%,#fbb040 30%,#f7941d 52%,#ef4b5d 75%,#c2185b 96%);
     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
     filter:drop-shadow(0 2px 10px rgba(255,255,255,.35)); }
-  #card .tag { opacity:.95; margin-bottom:14px; font-size:15px; font-weight:600;
+  #card .tag { opacity:.95; margin-bottom:14px; font-size:15px; font-weight:400;
     text-shadow:0 1px 6px rgba(80,0,60,.5); }
   #card .chooseLabel { font-size:13px; letter-spacing:.3em; text-transform:uppercase;
     font-weight:800; margin:10px 0 12px; color:#fff45e; text-shadow:0 1px 6px rgba(80,0,60,.5); }
