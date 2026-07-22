@@ -38,6 +38,9 @@ export const STR = {
   lbEnter: "You made the leaderboard! Enter your initials:",
   lbSave: "SAVE",
   lbEmpty: "No legends yet — be the first!",
+  topMunchers: "Top Munchers",
+  topMunchersTag: "Here's the board so far",
+  endGame: "END GAME",
   paused: "Paused — click to resume",
   seconds: "s",
   chars: {

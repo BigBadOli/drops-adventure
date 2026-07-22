@@ -569,12 +569,36 @@ function initAudio() {
       load("over", "./assets/audio/sfx-gameover.mp3");
     } catch (e) { /* no audio device — game remains playable */ }
   }
-  // iOS (Safari and Chrome-on-iOS, both WebKit) frequently creates the
-  // context already suspended even inside a tap handler — it must be
-  // resumed explicitly on every user gesture, not just once at creation,
-  // or the game stays completely silent with no error anywhere.
-  if (audio.ctx && audio.ctx.state !== "running") audio.ctx.resume().catch(() => {});
+  unlockAudio();
 }
+// iOS WebKit (Safari AND every third-party iOS browser — Chrome, Firefox,
+// etc. are all required by Apple to embed WebKit) frequently leaves the
+// AudioContext suspended even when created inside a tap handler, and
+// resume() alone is unreliable there. Actually starting a real (silent)
+// buffer source is the trick that reliably unlocks the audio session in
+// practice — this must happen synchronously inside a user gesture.
+function unlockAudio() {
+  if (!audio.ctx || audio.ctx.state === "running") return;
+  audio.ctx.resume().catch(() => {});
+  try {
+    const buf = audio.ctx.createBuffer(1, 1, 22050);
+    const src = audio.ctx.createBufferSource();
+    src.buffer = buf; src.connect(audio.ctx.destination); src.start(0);
+  } catch (e) {}
+}
+// belt-and-suspenders: if the very first gesture didn't fully unlock it
+// (observed to be flaky specifically in WKWebView-based iOS browsers),
+// keep retrying on every subsequent tap until it actually reports running
+function unlockOnNextGesture() {
+  if (!audio.ctx || audio.ctx.state === "running") {
+    removeEventListener("touchend", unlockOnNextGesture);
+    removeEventListener("click", unlockOnNextGesture);
+    return;
+  }
+  unlockAudio();
+}
+addEventListener("touchend", unlockOnNextGesture);
+addEventListener("click", unlockOnNextGesture);
 const muteBtn = document.getElementById("muteBtn");
 function applyMute() {
   if (audio.master) audio.master.gain.value = audio.muted ? 0 : 0.9;
@@ -595,6 +619,12 @@ const LB_MAX = 10;
 const LB_API = "/api/scores";
 function lbLoad() { try { return JSON.parse(localStorage.getItem("drops_lb") || "[]"); } catch (e) { return []; } }
 function lbStore(list) { try { localStorage.setItem("drops_lb", JSON.stringify(list)); } catch (e) {} }
+function lbQualifies(s, t) { // does this run crack the (locally cached) top LB_MAX?
+  const l = lbLoad();
+  if (l.length < LB_MAX) return true;
+  const worst = l[l.length - 1];
+  return s > worst.s || (s === worst.s && t > worst.t);
+}
 function lbAdd(n, s, t) {
   const l = lbLoad();
   l.push({ n, s, t });
@@ -698,8 +728,16 @@ function showOverlay(kind, data) {
       ${STR.howtoGoal}<br><br>${TOUCH ? STR.menuHintTouch : STR.menuHint}</div>
       <button id="resumeBtn" class="ctaBtn">${STR.resume}</button>`;
     el.card.querySelector("#resumeBtn").addEventListener("click", ev => { ev.stopPropagation(); closeMenu(); });
+  } else if (kind === "stopPreview") {
+    el.card.innerHTML = `<h1>${STR.topMunchers}</h1><div class="tag">${STR.topMunchersTag}</div>
+      <div id="lbBox">${lbTableHtml(lbLoad(), null, false)}</div>
+      <button id="resumeStopBtn" class="ctaBtn">${STR.resume}</button>
+      <button id="endGameBtn" class="ctaBtn endGameBtn">${STR.endGame}</button>`;
+    el.card.querySelector("#resumeStopBtn").addEventListener("click", ev => { ev.stopPropagation(); closeStopPreview(); });
+    el.card.querySelector("#endGameBtn").addEventListener("click", ev => { ev.stopPropagation(); gameOver(true); });
+    lbRefresh(null); // swap in the live global board when reachable
   } else if (kind === "over") {
-    const entering = !data.saved;
+    const entering = !data.saved && lbQualifies(data.score, data.time);
     const mid = entering
       ? `<div class="lbEnter">${STR.lbEnter}</div>
          <div class="lbForm"><input id="lbInit" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA">
@@ -811,6 +849,18 @@ function closeMenu() {
   hideOverlay();
   updateButtons();
 }
+function openStopPreview() { // stop tap → show the board first, don't end the run yet
+  if (state !== "play" && state !== "menu") return;
+  state = "stopPreview";
+  if (document.pointerLockElement) document.exitPointerLock();
+  showOverlay("stopPreview");
+  updateButtons();
+}
+function closeStopPreview() { // RESUME — the run keeps going untouched
+  state = "play";
+  hideOverlay();
+  updateButtons();
+}
 function gameOver(stopped) {
   state = "over";
   runActive = false;
@@ -828,7 +878,7 @@ el.overlay.addEventListener("click", () => {
 });
 const menuBtn = document.getElementById("menuBtn"), stopBtn = document.getElementById("stopBtn"), flavBtn = document.getElementById("flavBtn");
 menuBtn.addEventListener("click", () => { openMenu(); menuBtn.blur(); });
-stopBtn.addEventListener("click", () => { if (state === "play" || state === "menu") gameOver(true); stopBtn.blur(); });
+stopBtn.addEventListener("click", () => { openStopPreview(); stopBtn.blur(); });
 let flavorsFrom = "select"; // where to return when the flavors page closes
 function openFlavors() {
   if (state === "flavors" || state === "over") return;
@@ -848,8 +898,8 @@ flavBtn.addEventListener("click", () => { openFlavors(); flavBtn.blur(); });
 function updateButtons() {
   menuBtn.style.display = state === "play" ? "flex" : "none";
   stopBtn.style.display = state === "play" || state === "menu" ? "flex" : "none";
-  charBtn.style.display = state === "select" || state === "flavors" ? "none" : "flex";
-  flavBtn.style.display = state === "over" ? "none" : "flex";
+  charBtn.style.display = state === "select" || state === "flavors" || state === "stopPreview" ? "none" : "flex";
+  flavBtn.style.display = state === "over" || state === "stopPreview" ? "none" : "flex";
   if (TOUCH) {
     const playing = state === "play" ? "flex" : "none";
     document.getElementById("joyBase").style.display = playing;
