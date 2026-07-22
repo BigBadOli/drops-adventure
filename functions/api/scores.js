@@ -1,8 +1,9 @@
 // Live leaderboard — Cloudflare Pages Function backed by KV (binding: SCORES).
-// GET  /api/scores  → top 8 entries [{n, s, t}]
-// POST /api/scores  {n, s, t} → validates, stores top 50, returns top 8
+// Ranked by total gummies (s), survival time (t) as tiebreaker.
+// GET  /api/scores  → top 10 entries [{n, s, t}]
+// POST /api/scores  {n, s, t} → validates, stores top 50, returns top 10
 const TOP_KEY = "top";
-const RETURN_N = 8;
+const RETURN_N = 10;
 const KEEP_N = 50;
 
 async function readTop(env) {
@@ -25,7 +26,7 @@ export async function onRequestPost({ request, env }) {
   if (n.length !== 3) return new Response("bad initials", { status: 400 });
   const list = await readTop(env);
   list.push({ n, s, t, at: Date.now() });
-  list.sort((a, b) => b.t - a.t || b.s - a.s);
+  list.sort((a, b) => b.s - a.s || b.t - a.t);
   await env.SCORES.put(TOP_KEY, JSON.stringify(list.slice(0, KEEP_N)));
   return Response.json(list.slice(0, RETURN_N), {
     headers: { "cache-control": "no-store" },

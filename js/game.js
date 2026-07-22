@@ -18,6 +18,12 @@ const CFG = {
   camDist: 7.2, camSens: 0.0023,
   danceLen: 2.6, showLen: 4.5,
 };
+// single source of truth for the day/night cutover — the HUD label, the
+// progress bar, and the capture reaction (dance vs. sky show) all read this
+// same boundary so they flip in the exact same instant, never out of sync
+const NIGHT_A = 0.583, NIGHT_B = 0.94;
+function phaseOf(t) { return (t % CFG.dayLen) / CFG.dayLen; }
+function isNightPhase(phase) { return phase > NIGHT_A && phase < NIGHT_B; }
 const Q = new URLSearchParams(location.search);
 const DEV = Q.has("dev");
 const SMOKE = Q.has("smoke");
@@ -548,20 +554,26 @@ if (TOUCH) {
 const audio = { ctx: null, buffers: {}, music: null, muted: false };
 try { audio.muted = localStorage.getItem("drops_muted") === "1"; } catch (e) {}
 function initAudio() {
-  if (audio.ctx) return;
-  try {
-    audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const master = audio.ctx.createGain(); master.gain.value = audio.muted ? 0 : 0.9; master.connect(audio.ctx.destination);
-    audio.master = master;
-    audio.music = makeMusic(audio.ctx, master);
-    const load = (name, url) => fetch(url)
-      .then(r => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })
-      .then(ab => audio.ctx.decodeAudioData(ab))
-      .then(buf => { audio.buffers[name] = buf; })
-      .catch(() => {});
-    load("pickup", "./assets/audio/sfx-pickup.mp3");
-    load("over", "./assets/audio/sfx-gameover.mp3");
-  } catch (e) { /* no audio device — game remains playable */ }
+  if (!audio.ctx) {
+    try {
+      audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const master = audio.ctx.createGain(); master.gain.value = audio.muted ? 0 : 0.9; master.connect(audio.ctx.destination);
+      audio.master = master;
+      audio.music = makeMusic(audio.ctx, master);
+      const load = (name, url) => fetch(url)
+        .then(r => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })
+        .then(ab => audio.ctx.decodeAudioData(ab))
+        .then(buf => { audio.buffers[name] = buf; })
+        .catch(() => {});
+      load("pickup", "./assets/audio/sfx-pickup.mp3");
+      load("over", "./assets/audio/sfx-gameover.mp3");
+    } catch (e) { /* no audio device — game remains playable */ }
+  }
+  // iOS (Safari and Chrome-on-iOS, both WebKit) frequently creates the
+  // context already suspended even inside a tap handler — it must be
+  // resumed explicitly on every user gesture, not just once at creation,
+  // or the game stays completely silent with no error anywhere.
+  if (audio.ctx && audio.ctx.state !== "running") audio.ctx.resume().catch(() => {});
 }
 const muteBtn = document.getElementById("muteBtn");
 function applyMute() {
@@ -578,14 +590,15 @@ charBtn.addEventListener("click", () => { if (state !== "select") gotoSelect(); 
 
 // ---------- leaderboard: live global board (Pages Function + KV) with a
 // ---------- localStorage fallback for offline/local play ----------
-const LB_MAX = 8;
+// Ranked by total gummies, survival time as tiebreaker.
+const LB_MAX = 10;
 const LB_API = "/api/scores";
 function lbLoad() { try { return JSON.parse(localStorage.getItem("drops_lb") || "[]"); } catch (e) { return []; } }
 function lbStore(list) { try { localStorage.setItem("drops_lb", JSON.stringify(list)); } catch (e) {} }
 function lbAdd(n, s, t) {
   const l = lbLoad();
   l.push({ n, s, t });
-  l.sort((a, b) => b.t - a.t || b.s - a.s);
+  l.sort((a, b) => b.s - a.s || b.t - a.t);
   lbStore(l.slice(0, LB_MAX));
 }
 function lbSubmit(entry) {
@@ -604,7 +617,7 @@ async function lbRefresh(hl) {
 function lbTableHtml(l, hl, live) {
   if (!l.length) return `<div class="dim">${STR.lbEmpty}</div>`;
   return `<div class="lbTitle">${STR.lbTitle}${live ? " 🌐" : ""}</div><div class="lb">` + l.slice(0, LB_MAX).map((e, i) =>
-    `<div class="lbRow${hl && e.n === hl.n && e.t === hl.t ? " hl" : ""}">` +
+    `<div class="lbRow${hl && e.n === hl.n && e.s === hl.s ? " hl" : ""}">` +
     `<span>${i + 1}</span><b>${e.n}</b><span>${e.s} 🍬</span><span>${fmtTime(e.t)}${e.t < 60 ? STR.seconds : ""}</span></div>`).join("") + `</div>`;
 }
 function playSfx(name, gain) {
@@ -703,7 +716,7 @@ function showOverlay(kind, data) {
       const save = () => {
         const n = (inp.value.toUpperCase().replace(/[^A-Z0-9]/g, "") || "???").padEnd(3, "•").slice(0, 3);
         lbAdd(n, data.score, data.time);
-        const justSaved = { n, t: data.time };
+        const justSaved = { n, s: data.score, t: data.time };
         lbSubmit({ n, s: data.score, t: data.time }).then(() => lbRefresh(justSaved));
         showOverlay("over", { ...data, saved: true, justSaved });
       };
@@ -726,8 +739,8 @@ let danceT = 0;        // sim: seconds of boogie left (day capture)
 let showT = 0;         // presentation: seconds of sky show left (night capture)
 let showFxT = 0;       // spawn cadence accumulator for comets/fireworks
 let confettiT = 0;     // dance confetti cadence
-let best = 0;
-try { best = +(localStorage.getItem("drops_best") || 0); } catch (e) {}
+let best = 0; // best GUMMY COUNT from a single run (not survival time)
+try { best = +(localStorage.getItem("drops_best_gummies") || 0); } catch (e) {}
 function resetRun() {
   runCount++;
   layoutNodes(BASE_SEED + runCount - 1);
@@ -804,7 +817,7 @@ function gameOver(stopped) {
   playSfx("over", 0.42);
   if (audio.music) audio.music.setGain(0.05);
   const t = Math.round(survived);
-  if (t > best) { best = t; try { localStorage.setItem("drops_best", String(best)); } catch (e) {} }
+  if (score > best) { best = score; try { localStorage.setItem("drops_best_gummies", String(best)); } catch (e) {} }
   if (document.pointerLockElement) document.exitPointerLock();
   showOverlay("over", { score, time: t, best, stopped });
   updateButtons();
@@ -865,7 +878,7 @@ function updateSky(phase) {
   // sun travels across the sky; at night a low cool "moon" replaces it
   const dayT = Math.min(1, Math.max(0, phase / 0.583));
   const nightT = Math.min(1, Math.max(0, (phase - 0.6) / 0.34));
-  const isNight = phase > 0.583 && phase < 0.94;
+  const isNight = isNightPhase(phase);
   const elv = isNight ? 0.35 + Math.sin(nightT * Math.PI) * 0.45 : 0.25 + Math.sin(dayT * Math.PI) * 0.85;
   const az = phase * Math.PI * 2 + 0.6;
   sun.position.set(Math.cos(az) * 120, Math.max(0.12, Math.sin(elv)) * 110, Math.sin(az) * 120);
@@ -943,6 +956,10 @@ function step(dt) {
   if (bar <= 0) { bar = 0; gameOver(); return; }
 
   // --- collect: day → dance, night → sky show ---
+  // isNight uses the exact same phase boundary as the HUD's day/night label
+  // and progress bar (isNightPhase) — not the gradual nightFactor ramp — so
+  // the capture reaction flips in the same instant the bar does, no drift
+  const isNight = isNightPhase(phaseOf(simT));
   for (let i = 0; i < nodePts.length; i++) {
     if (!nodeState[i].active) continue;
     const dx = px - nodePts[i].x, dz = pz - nodePts[i].z;
@@ -955,7 +972,7 @@ function step(dt) {
       spawnBurst(nodePts[i].x, terrainH(nodePts[i].x, nodePts[i].z) + 1.0, nodePts[i].z, col);
       playSfx("pickup", 0.3);
       showToast(nodeColor[i]);
-      if (nightFactor > 0.4) { showT = CFG.showLen; showFxT = 0; }
+      if (isNight) { showT = CFG.showLen; showFxT = 0; }
       else { danceT = CFG.danceLen; confettiT = 0; }
     }
   }
@@ -1163,18 +1180,18 @@ function updateHUD(realDt) {
   hudT = 0.15;
   el.energyFill.style.transform = `scaleX(${bar / CFG.barMax})`;
   el.energyWrap.classList.toggle("low", bar < 25);
-  const phase = (simT % CFG.dayLen) / CFG.dayLen;
-  const isNight = phase > 0.583 && phase < 0.94;
+  const phase = phaseOf(simT);
+  const isNight = isNightPhase(phase);
   el.cycleLabel.textContent = isNight ? STR.night : STR.day;
   // bar grows 0→100% across the CURRENT phase, then the label flips
-  const NIGHT_A = 0.583, NIGHT_B = 0.94, DAY_LEN = 1 - (NIGHT_B - NIGHT_A);
+  const DAY_LEN = 1 - (NIGHT_B - NIGHT_A);
   const prog = isNight
     ? (phase - NIGHT_A) / (NIGHT_B - NIGHT_A)
     : ((phase >= NIGHT_B ? phase - NIGHT_B : phase + (1 - NIGHT_B)) / DAY_LEN);
   el.cycleFill.style.width = `${Math.min(100, prog * 100).toFixed(1)}%`;
   const dot = isNight ? "#8fa8d8" : "#ffd9a0";
   el.cycleDot.style.background = dot; el.cycleDot.style.boxShadow = `0 0 10px ${dot}`;
-  el.stats.innerHTML = `${STR.score}: <b>${score}</b><br>${STR.time}: <b>${fmtTime(survived)}</b>${best > 0 ? `<br>${STR.best}: <b>${fmtTime(best)}</b>` : ""}`;
+  el.stats.innerHTML = `${STR.score}: <b>${score}</b><br>${STR.time}: <b>${fmtTime(survived)}</b>${best > 0 ? `<br>${STR.best}: <b>${best}</b> 🍬` : ""}`;
 }
 
 // ---------- smoke route (§13.5): bot plays the reference route ----------
@@ -1280,7 +1297,8 @@ if (DEV || SMOKE) {
         inView = p.z < 0 && Math.abs(Math.atan2(p.x, -p.z)) < hFov / 2 && Math.abs(Math.atan2(p.y, -p.z)) < vFov / 2;
       }
       return { camYaw, camPitch, logoYaw, logoPos: logoSprite ? logoSprite.position.toArray() : null, camPos: camera.position.toArray(), px, pz, local, inView,
-        opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor };
+        opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor,
+        simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state };
     },
     magnet: () => { // teleport onto the nearest active gummy (capture test)
       let bi = -1, bd = 1e9;
