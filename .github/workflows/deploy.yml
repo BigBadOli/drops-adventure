@@ -17,5 +17,5 @@ jobs:
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: 0cc7327da4f3d67ccdcb0e075d72eccc # not sensitive — visible in the dashboard URL
           command: pages deploy . --project-name=drops-adventure --branch=main

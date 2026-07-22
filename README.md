@@ -54,8 +54,10 @@ localStorage board when the API is unreachable (e.g. local `npm run dev`).
 
 **Automatic:** every push to `main` on GitHub deploys via
 `.github/workflows/deploy.yml` (uses `cloudflare/wrangler-action`). One-time
-setup: add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` —
-see the setup note below.
+setup: add a `CLOUDFLARE_API_TOKEN` repo secret (Settings → Secrets and
+variables → Actions, or `gh secret set CLOUDFLARE_API_TOKEN`). Create the
+token at https://dash.cloudflare.com/profile/api-tokens using the "Edit
+Cloudflare Workers" template, scoped to this account.
 
 **Manual (fallback):**
 ```bash
