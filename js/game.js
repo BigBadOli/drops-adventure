@@ -441,7 +441,9 @@ addEventListener("keyup", e => {
   const c = BIND[e.code]; if (c) keys.delete(c);
 });
 let camYaw = 0, camPitch = 0.42, locked = false;
-canvas.addEventListener("click", () => { if (state === "play" && !locked && !SMOKE) canvas.requestPointerLock(); });
+const TOUCH = Q.has("touch") || "ontouchstart" in window || navigator.maxTouchPoints > 0; // ?touch forces the mobile control layout for QA
+if (TOUCH) document.body.classList.add("touch-ui"); // lifts the energy bar clear of the joystick/action buttons
+canvas.addEventListener("click", () => { if (state === "play" && !locked && !SMOKE && !TOUCH) canvas.requestPointerLock(); });
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === canvas;
   if (!locked && state === "play" && !SMOKE) openMenu(); // Esc from lock = pause menu
@@ -471,6 +473,75 @@ function gamepadInput(out) {
     out._start = start;
   }
   return out;
+}
+
+// ---------- touch controls (mobile): virtual joystick + drag-to-look ----------
+const TOUCH_LOOK_SENS = 1.5; // touch drags cover less screen distance than a mouse — boost sensitivity
+const touchMove = { x: 0, z: 0 };
+let touchSprint = false, touchJumpQueued = false;
+if (TOUCH) {
+  const joyBase = document.getElementById("joyBase"), joyKnob = document.getElementById("joyKnob");
+  const lookLayer = document.getElementById("lookLayer");
+  const jumpBtn = document.getElementById("jumpBtn"), sprintBtn = document.getElementById("sprintBtn");
+  const JOY_R = 44; // px of knob travel — matches the drawn base radius minus the knob
+
+  let joyId = null, joyCenter = { x: 0, y: 0 };
+  function updateJoy(cx, cy) {
+    let dx = cx - joyCenter.x, dz = cy - joyCenter.y;
+    const d = Math.hypot(dx, dz);
+    if (d > JOY_R) { dx = dx / d * JOY_R; dz = dz / d * JOY_R; }
+    joyKnob.style.transform = `translate(${dx.toFixed(1)}px, ${dz.toFixed(1)}px)`;
+    const nx = dx / JOY_R, nz = dz / JOY_R;
+    if (Math.hypot(nx, nz) < 0.15) { touchMove.x = 0; touchMove.z = 0; }
+    else { touchMove.x = nx; touchMove.z = nz; }
+  }
+  function resetJoy() {
+    joyId = null; touchMove.x = 0; touchMove.z = 0;
+    joyKnob.style.transform = "translate(0,0)";
+  }
+  joyBase.addEventListener("touchstart", e => {
+    e.preventDefault();
+    if (joyId !== null) return;
+    const t = e.changedTouches[0], r = joyBase.getBoundingClientRect();
+    joyId = t.identifier; joyCenter = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    updateJoy(t.clientX, t.clientY);
+  }, { passive: false });
+  addEventListener("touchmove", e => {
+    if (joyId === null) return;
+    for (const t of e.changedTouches) if (t.identifier === joyId) { e.preventDefault(); updateJoy(t.clientX, t.clientY); }
+  }, { passive: false });
+  const endJoy = e => { for (const t of e.changedTouches) if (t.identifier === joyId) resetJoy(); };
+  addEventListener("touchend", endJoy, { passive: true });
+  addEventListener("touchcancel", endJoy, { passive: true });
+
+  // camera look: drag anywhere on the layer (one finger) — mirrors mousemove
+  let lookId = null, lookX = 0, lookY = 0;
+  lookLayer.addEventListener("touchstart", e => {
+    if (lookId !== null || state !== "play") return;
+    const t = e.changedTouches[0];
+    lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+  }, { passive: true });
+  lookLayer.addEventListener("touchmove", e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookId) continue;
+      e.preventDefault();
+      const dx = t.clientX - lookX, dy = t.clientY - lookY;
+      lookX = t.clientX; lookY = t.clientY;
+      camYaw -= dx * CFG.camSens * TOUCH_LOOK_SENS;
+      camPitch = Math.min(1.15, Math.max(-0.3, camPitch + dy * CFG.camSens * TOUCH_LOOK_SENS));
+    }
+  }, { passive: false });
+  const endLook = e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; };
+  lookLayer.addEventListener("touchend", endLook, { passive: true });
+  lookLayer.addEventListener("touchcancel", endLook, { passive: true });
+
+  const pressFx = (btn, on) => btn.classList.toggle("pressed", on);
+  sprintBtn.addEventListener("touchstart", e => { e.preventDefault(); touchSprint = true; pressFx(sprintBtn, true); }, { passive: false });
+  const releaseSprint = () => { touchSprint = false; pressFx(sprintBtn, false); };
+  sprintBtn.addEventListener("touchend", releaseSprint); sprintBtn.addEventListener("touchcancel", releaseSprint);
+  jumpBtn.addEventListener("touchstart", e => { e.preventDefault(); touchJumpQueued = true; pressFx(jumpBtn, true); }, { passive: false });
+  const releaseJump = () => pressFx(jumpBtn, false);
+  jumpBtn.addEventListener("touchend", releaseJump); jumpBtn.addEventListener("touchcancel", releaseJump);
 }
 
 // ---------- audio: procedural per-character music + sampled sfx ----------
@@ -569,6 +640,11 @@ function showToast(fi) {
   void toastEl.offsetWidth; // restart the CSS animation
   toastEl.classList.add("pop");
 }
+function howToText() {
+  return TOUCH
+    ? `${STR.howtoMoveTouch} · ${STR.howtoLookTouch} · ${STR.howtoSprintTouch} · ${STR.howtoJumpTouch}`
+    : `${STR.howtoMove} · ${STR.howtoLook} · ${STR.howtoSprint} · ${STR.howtoJump}`;
+}
 function showOverlay(kind, data) {
   el.overlay.classList.remove("hidden");
   el.card.classList.toggle("wide", kind === "select" || kind === "flavors");
@@ -584,7 +660,7 @@ function showOverlay(kind, data) {
     el.card.innerHTML = `${heading}
       <div class="chooseLabel">${STR.choose}</div>
       <div class="cards">${cardHtml}</div>
-      <div class="how">${STR.howtoMove} · ${STR.howtoLook} · ${STR.howtoSprint} · ${STR.howtoJump}<br>${STR.howtoGoal}</div>
+      <div class="how">${howToText()}<br>${STR.howtoGoal}</div>
       <div class="cta">${STR.clickToPlay}</div>`;
     el.card.querySelectorAll(".charCard").forEach(cardEl => {
       cardEl.addEventListener("click", ev => {
@@ -604,8 +680,8 @@ function showOverlay(kind, data) {
     el.card.querySelector("#flavCloseBtn").addEventListener("click", ev => { ev.stopPropagation(); closeFlavors(); });
   } else if (kind === "menu") {
     el.card.innerHTML = `<h1>${STR.title}</h1><div class="tag">${STR.tagline}</div>
-      <div class="how">${STR.howtoMove} · ${STR.howtoLook} · ${STR.howtoSprint} · ${STR.howtoJump}<br>
-      ${STR.howtoGoal}<br><br>${STR.menuHint}</div>
+      <div class="how">${howToText()}<br>
+      ${STR.howtoGoal}<br><br>${TOUCH ? STR.menuHintTouch : STR.menuHint}</div>
       <button id="resumeBtn" class="ctaBtn">${STR.resume}</button>`;
     el.card.querySelector("#resumeBtn").addEventListener("click", ev => { ev.stopPropagation(); closeMenu(); });
   } else if (kind === "over") {
@@ -619,7 +695,7 @@ function showOverlay(kind, data) {
       <div class="big">${STR.finalScore}: <b>${data.score}</b> · ${STR.finalTime}: <b>${data.time}${STR.seconds}</b></div>
       ${mid}
       <button id="againBtn" class="ctaBtn">${STR.playAgain}</button>
-      <div class="dim" style="margin-top:8px">${STR.restartHint}</div>`;
+      <div class="dim" style="margin-top:8px">${TOUCH ? STR.restartHintTouch : STR.restartHint}</div>`;
     el.card.querySelector("#againBtn").addEventListener("click", ev => { ev.stopPropagation(); startPlay(); });
     if (entering) {
       const inp = el.card.querySelector("#lbInit");
@@ -686,7 +762,7 @@ function startPlay() {
   initAudio();
   if (audio.music) { audio.music.setGain(0.14); audio.music.start(MUSIC_STYLE[selectedChar]); }
   updateButtons();
-  if (!SMOKE) canvas.requestPointerLock();
+  if (!SMOKE && !TOUCH) canvas.requestPointerLock();
 }
 function resumePlay() { // continue the in-flight run (hero may have changed)
   state = "play";
@@ -734,7 +810,7 @@ function gameOver(stopped) {
 }
 el.overlay.addEventListener("click", () => {
   // game-over card has its own buttons (initials entry must stay clickable)
-  if (state === "play" && !locked) canvas.requestPointerLock();
+  if (state === "play" && !locked && !TOUCH) canvas.requestPointerLock();
 });
 const menuBtn = document.getElementById("menuBtn"), stopBtn = document.getElementById("stopBtn"), flavBtn = document.getElementById("flavBtn");
 menuBtn.addEventListener("click", () => { openMenu(); menuBtn.blur(); });
@@ -760,6 +836,13 @@ function updateButtons() {
   stopBtn.style.display = state === "play" || state === "menu" ? "flex" : "none";
   charBtn.style.display = state === "select" || state === "flavors" ? "none" : "flex";
   flavBtn.style.display = state === "over" ? "none" : "flex";
+  if (TOUCH) {
+    const playing = state === "play" ? "flex" : "none";
+    document.getElementById("joyBase").style.display = playing;
+    document.getElementById("jumpBtn").style.display = playing;
+    document.getElementById("sprintBtn").style.display = playing;
+    document.getElementById("lookLayer").style.pointerEvents = state === "play" ? "auto" : "none";
+  }
 }
 
 // ---------- sky / day-night ----------
@@ -811,9 +894,9 @@ function step(dt) {
   // --- input → wish direction (camera-relative) ---
   gamepadInput(padState);
   if (padState.restart) { padState.restart = false; startPlay(); return; }
-  let ix = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0) + padState.gx;
-  let iy = (keys.has("b") ? 1 : 0) - (keys.has("f") ? 1 : 0) + padState.gy;
-  let sprint = keys.has("sprint") || padState.sprint;
+  let ix = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0) + padState.gx + touchMove.x;
+  let iy = (keys.has("b") ? 1 : 0) - (keys.has("f") ? 1 : 0) + padState.gy + touchMove.z;
+  let sprint = keys.has("sprint") || padState.sprint || touchSprint;
   if (botWish) { ix = botWish.x; iy = botWish.z; sprint = botWish.sprint; }
   if (danceT > 0) { danceT -= dt; ix = 0; iy = 0; sprint = false; } // boogie lock
   const il = Math.hypot(ix, iy);
@@ -847,8 +930,8 @@ function step(dt) {
   if (pr > CFG.playableR) { px *= CFG.playableR / pr; pz *= CFG.playableR / pr; }
 
   // hop (cosmetic verb — never required to reach a node)
-  if ((keys.has("jump") || padState.jump) && grounded && danceT <= 0) { vy = CFG.jumpV; grounded = false; }
-  padState.jump = false;
+  if ((keys.has("jump") || padState.jump || touchJumpQueued) && grounded && danceT <= 0) { vy = CFG.jumpV; grounded = false; }
+  padState.jump = false; touchJumpQueued = false;
   if (!grounded) {
     jumpY += vy * dt; vy -= CFG.gravity * dt;
     if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; }

@@ -6,8 +6,9 @@
 <title>Drops Adventure</title>
 <style>
   html, body { margin:0; height:100%; overflow:hidden; background:#1a1030;
-    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif; }
-  canvas { display:block; }
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    touch-action:none; overscroll-behavior:none; -webkit-user-select:none; }
+  canvas { display:block; touch-action:none; }
   #hud { position:fixed; inset:0; pointer-events:none; user-select:none; }
   .panel { background:linear-gradient(135deg, rgba(255,79,158,.72), rgba(255,148,64,.62) 55%, rgba(148,82,255,.7));
     border:1.5px solid rgba(255,255,255,.45); border-radius:16px; backdrop-filter: blur(8px);
@@ -100,6 +101,7 @@
     background:rgba(40,0,50,.5); color:#fff; padding:8px 4px 8px 12px; font-weight:800;
     outline:none; font-family:inherit; }
   .lbForm input:focus { border-color:#fff45e; box-shadow:0 0 12px rgba(255,244,94,.5); }
+  .lbForm input { touch-action:manipulation; }
   .ctaBtn { display:inline-block; margin-top:14px; padding:10px 26px; border-radius:999px;
     border:2px solid rgba(255,255,255,.6); cursor:pointer; font-family:inherit;
     font-size:15px; letter-spacing:.14em; font-weight:800; color:#fff;
@@ -152,11 +154,34 @@
   #dev { position:fixed; left:8px; bottom:8px; color:#7be8b0; font:12px/1.5 monospace;
     background:rgba(0,0,0,.55); padding:6px 9px; border-radius:6px; display:none; white-space:pre; }
   .hidden { display:none !important; }
+
+  /* touch controls (mobile) — hidden by default; game.js reveals them when a
+     touch-capable device is detected and gameplay is active */
+  #lookLayer { position:absolute; inset:0; touch-action:none; pointer-events:none; }
+  #joyBase { position:absolute; left:22px; bottom:22px; width:124px; height:124px;
+    border-radius:50%; display:none; align-items:center; justify-content:center;
+    touch-action:none; pointer-events:auto;
+    background:radial-gradient(circle, rgba(255,255,255,.16), rgba(255,255,255,.05) 70%);
+    border:1.5px solid rgba(255,255,255,.4); }
+  #joyKnob { width:56px; height:56px; border-radius:50%; pointer-events:none;
+    background:linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,220,240,.85));
+    box-shadow:0 2px 12px rgba(0,0,0,.4); }
+  .actionBtn { position:absolute; bottom:24px; width:70px; height:70px; border-radius:50%;
+    border:1.5px solid rgba(255,255,255,.55); display:none; align-items:center; justify-content:center;
+    font-size:28px; color:#fff; touch-action:none; pointer-events:auto;
+    box-shadow:0 4px 16px rgba(120,30,120,.35); transition:transform .08s ease; }
+  .actionBtn.pressed { transform:scale(.9); }
+  #jumpBtn { right:96px; background:linear-gradient(135deg, rgba(251,176,64,.92), rgba(239,75,93,.92)); }
+  #sprintBtn { right:182px; background:linear-gradient(135deg, rgba(43,182,255,.9), rgba(148,82,255,.9)); }
+  /* touch mode: the joystick + action buttons occupy the bottom band, so
+     lift the (otherwise bottom-centered) energy bar clear of them */
+  .touch-ui #energyWrap { bottom:156px; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 <div id="hud">
+  <div id="lookLayer"></div>
   <div id="cycle" class="panel"><span id="cycleDot"></span><span id="cycleLabel"></span><div id="cycleBar"><div id="cycleFill"></div></div></div>
   <div id="stats" class="panel"></div>
   <div id="energyWrap" class="panel">
@@ -170,6 +195,9 @@
   <button id="charBtn" title="Switch hero (C)" aria-label="Switch hero">🎭</button>
   <button id="stopBtn" title="Stop game — save your score" aria-label="Stop game">🏁</button>
   <button id="muteBtn" title="Mute (M)" aria-label="Mute">🔊</button>
+  <div id="joyBase"><div id="joyKnob"></div></div>
+  <button id="sprintBtn" class="actionBtn" title="Sprint" aria-label="Sprint">⚡</button>
+  <button id="jumpBtn" class="actionBtn" title="Jump" aria-label="Jump">⤴</button>
   <div id="dev"></div>
 </div>
 <script type="module" src="./js/game.js"></script>
