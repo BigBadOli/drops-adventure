@@ -107,21 +107,21 @@ const starGeo = new THREE.BufferGeometry();
 const starMat = new THREE.PointsMaterial({ color: 0xdfe8ff, size: 1.4, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
 scene.add(new THREE.Points(starGeo, starMat));
 
-// Drops logo floating in the far sky (brand beacon; fog-free so it reads at
-// distance). Azimuth drifts to follow wherever the camera is currently
-// looking — a logo fixed at one absolute world bearing would end up out of
-// frame the moment the player turns, since the mouse now free-orbits.
-// Height is a fixed constant rather than projected along the camera's own
-// downward-tilted view ray (that blows up: at 200 units out, even the
-// default camera tilt sends a ray-projected point tens of units underwater).
-// H=0 was picked empirically — it's the height that stays inside the
-// vertical FOV across the full normal look-around pitch range (tested
-// -0.3..0.5 rad) with the most margin; only an unusually steep downward
-// look (>~0.5 rad, closer to staring at your own feet) loses it, which
-// reads as reasonable (you don't see the sky staring at the ground).
+// Drops logo floating high in the sky, like a kite — well above the water
+// (fog-free so it reads at distance). Azimuth drifts to follow wherever the
+// camera is currently looking — a logo fixed at one absolute world bearing
+// would end up out of frame the moment the player turns, since the mouse
+// now free-orbits. Height is a fixed constant rather than projected along
+// the camera's own downward-tilted view ray (that blows up: at 200 units
+// out, even a mild tilt sends a ray-projected point tens of units
+// underwater). H=40 sits above the horizon on purpose: it's out of frame
+// under the default gameplay pitch (~0.42 rad, looking slightly down at
+// the character) and only comes into view once the player tilts the
+// camera upward — a discoverable sky detail, not something stuck in the
+// default view.
 let logoSprite = null;
 let logoYaw = 0.6;
-const LOGO_DIST = 200, LOGO_H = 0;
+const LOGO_DIST = 200, LOGO_H = 40;
 {
   new THREE.TextureLoader().load("./assets/img/drops-logo.png", tex => {
     tex.colorSpace = THREE.SRGBColorSpace;
