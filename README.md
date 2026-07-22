@@ -52,12 +52,22 @@ localStorage board when the API is unreachable (e.g. local `npm run dev`).
 
 ## Deploy to Cloudflare Pages
 
+**Automatic:** every push to `main` on GitHub deploys via
+`.github/workflows/deploy.yml` (uses `cloudflare/wrangler-action`). One-time
+setup: add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` —
+see the setup note below.
+
+**Manual (fallback):**
 ```bash
 npx wrangler login     # once
 npm run deploy         # wrangler pages deploy . --project-name drops-adventure
 ```
 
-No build output directory — the repo root is the site.
+No build output directory — the repo root is the site. Note: Cloudflare
+Pages' native Git integration can't be *added* to an existing direct-upload
+project (would require deleting and recreating it), so CI/CD here runs
+through GitHub Actions + Wrangler instead — same result, zero disruption to
+the live project.
 
 ## Notes
 
