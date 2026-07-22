@@ -1,0 +1,8 @@
+# Cloudflare Pages config — static site (no build) + /functions API.
+name = "drops-adventure"
+compatibility_date = "2026-07-01"
+pages_build_output_dir = "."
+
+[[kv_namespaces]]
+binding = "SCORES"
+id = "0c730c0269694b4a871c59489bbc24fd"

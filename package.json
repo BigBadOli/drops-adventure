@@ -1,0 +1,10 @@
+{
+  "name": "drops-adventure",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Drops Adventure — low-poly island walking game with gummy power-ups",
+  "scripts": {
+    "dev": "python3 -m http.server 8787",
+    "deploy": "wrangler pages deploy . --project-name drops-adventure"
+  }
+}

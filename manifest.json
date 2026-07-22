@@ -1,0 +1,28 @@
+{
+  "game_id": "elegant-fox-582",
+  "name": "Drops Adventure",
+  "main": "app.js",
+  "class_name": "App",
+  "socket_mode": "direct",
+  "meta": {
+    "title": "Drops Adventure",
+    "description": "A bright low-poly island walking adventure. Pick your hero — rave girl, mountain man, or billy goat — and wander the isle collecting wiggling Drops gummies. Day captures spark a boogie; night captures light the sky with comets and fireworks.",
+    "thumbnail_path": "og/thumbnail.png",
+    "favicon_path": "og/favicon.png"
+  },
+  "files": [
+    "app.js",
+    "assets/audio/sfx-gameover.mp3",
+    "assets/audio/sfx-pickup.mp3",
+    "assets/img/drops-logo.png",
+    "index.html",
+    "js/characters.js",
+    "js/game.js",
+    "js/music.js",
+    "js/style.js",
+    "og/favicon.png",
+    "og/thumbnail.png",
+    "strings.js",
+    "vendor/three.module.js"
+  ]
+}
