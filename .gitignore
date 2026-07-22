@@ -1,3 +1,9 @@
 .DS_Store
 node_modules/
 .wrangler/
+
+# Formiga desktop OTF source files (licensed for desktop use; only the
+# converted webfont files — .woff2/.woff, licensed separately for web use —
+# should ever be committed/deployed, since Cloudflare Pages serves every
+# file in the repo publicly regardless of whether it's linked from HTML)
+assets/fonts/*.otf
