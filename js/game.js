@@ -465,8 +465,13 @@ addEventListener("keydown", e => {
   // would never see the gap. e.repeat filters the OS key-repeat.
   if (c === "jump") { if (!e.repeat) jumpQueued = true; e.preventDefault(); }
 });
+// Releases are ALWAYS honoured, whatever has focus. The keydown guard above
+// exists so typing initials can't steer the hero — but applying it here too
+// swallowed the release, leaving the key stuck down forever. Clicking a button
+// (Play Again) focuses it, so letting go of W right afterwards stranded the
+// hero at a run until the key was tapped again. Deleting a key that was never
+// added is a no-op, so there is nothing to guard against.
 addEventListener("keyup", e => {
-  if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return;
   const c = BIND[e.code]; if (c) keys.delete(c);
 });
 let camYaw = 0, camPitch = 0.42, locked = false;
@@ -774,7 +779,7 @@ function showOverlay(kind, data) {
       ${mid}
       <button id="againBtn" class="ctaBtn">${STR.playAgain}</button>
       <div class="dim" style="margin-top:8px">${TOUCH ? STR.restartHintTouch : STR.restartHint}</div>`;
-    el.card.querySelector("#againBtn").addEventListener("click", ev => { ev.stopPropagation(); startPlay(); });
+    el.card.querySelector("#againBtn").addEventListener("click", ev => { ev.stopPropagation(); ev.currentTarget.blur(); startPlay(); });
     if (entering) {
       const inp = el.card.querySelector("#lbInit");
       const save = () => {
@@ -813,6 +818,10 @@ function resetRun() {
   bar = CFG.barMax; score = 0; survived = START_T; simT = START_T; collected = 0;
   px = 0; pz = 0; py = terrainH(0, 0); vx = 0; vz = 0; vy = 0; jumpY = 0; grounded = true;
   jumpsLeft = CFG.jumps; jumpQueued = false; falling = false; sinkT = 0;
+  // every run starts from a neutral input state — otherwise anything still held
+  // (or stuck) when the last run ended carries straight into the new one
+  keys.clear(); touchMove.x = 0; touchMove.z = 0; touchSprint = false; touchJumpQueued = false;
+  padState.gx = 0; padState.gy = 0; padState.sprint = false; padState.jump = false;
   heading = 0; walkCycle = 0; camYaw = 0; camPitch = 0.42;
   danceT = 0; showT = 0; showFxT = 0; confettiT = 0;
   respawnQ = [];
