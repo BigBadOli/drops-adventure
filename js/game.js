@@ -14,7 +14,7 @@ const CFG = {
   spawnPoints: 30, activeNodes: 12, respawn: 10,
   barMax: 100, drain: 1.6, sprintMult: 2.5, refill: 20,
   walk: 5, sprint: 8, collectR: 1.45,
-  dayLen: 120, jumpV: 4.6, gravity: 12,
+  dayLen: 120, jumpV: 4.6, gravity: 12, jumps: 2, jump2Mult: 0.88,
   camDist: 7.2, camSens: 0.0023,
   danceLen: 2.6, showLen: 4.5,
 };
@@ -346,6 +346,12 @@ function firePool(pool, idx, x, y, z, colorHex, speed, up, life, gravity) {
 function spawnBurst(x, y, z, colorHex) {
   firePool(bursts, burstIdx++, x, y, z, colorHex, 2.4, 1.4, 0.7, 5.5);
 }
+// puff kicked out and down under the feet on the air-jump — sells pushing off
+// nothing. Warm and wide on purpose: these particles blend additively, so a
+// pale tight clump vanishes against sunlit grass.
+function spawnAirKick(x, y, z) {
+  firePool(bursts, burstIdx++, x, y, z, 0xfff2cc, 3.4, -0.8, 0.5, 2.2);
+}
 function spawnFirework(x, y, z, colorHex) {
   firePool(fireworks, fwIdx++, x, y, z, colorHex, 12, 2.0, 1.5, 2.2);
 }
@@ -414,10 +420,15 @@ function setCharacter(id) {
   rig = buildCharacter(id);
   player.add(rig.group);
 }
-// select-screen previews: the three heroes lined up on the meadow facing camera
+// select-screen previews: the heroes lined up on the meadow facing camera.
+// Spread is a fixed total width, not a fixed gap, so adding a hero packs the
+// row tighter instead of pushing the outer two out of the select camera's view.
+const PREVIEW_SPREAD = 4.0;
 const previewRigs = CHAR_IDS.map((id, i) => {
   const r = buildCharacter(id);
-  const x = (i - 1) * 2.0, z = -3.6 + Math.abs(i - 1) * 0.3;
+  const c = (CHAR_IDS.length - 1) / 2;
+  const x = c === 0 ? 0 : ((i - c) / c) * (PREVIEW_SPREAD / 2);
+  const z = -3.6 + (c === 0 ? 0 : Math.abs(i - c) / c) * 0.3;
   r.group.position.set(x, terrainH(x, z), z);
   r.group.rotation.y = Math.PI + (i - 1) * -0.25; // face the camera
   scene.add(r.group);
@@ -427,7 +438,7 @@ function setPreviewVisible(v) { for (const r of previewRigs) r.group.visible = v
 
 // ---------- input (physical codes §1; gamepad; pointer lock) ----------
 const keys = new Set();
-const BIND = { KeyW: "f", KeyS: "b", KeyA: "l", KeyD: "r", ArrowUp: "f", ArrowDown: "b", ArrowLeft: "l", ArrowRight: "r", ShiftLeft: "sprint", ShiftRight: "sprint", Space: "jump", KeyR: "restart", KeyC: "chchar", KeyM: "mute", Digit1: "c1", Digit2: "c2", Digit3: "c3" };
+const BIND = { KeyW: "f", KeyS: "b", KeyA: "l", KeyD: "r", ArrowUp: "f", ArrowDown: "b", ArrowLeft: "l", ArrowRight: "r", ShiftLeft: "sprint", ShiftRight: "sprint", Space: "jump", KeyR: "restart", KeyC: "chchar", KeyM: "mute", Digit1: "c1", Digit2: "c2", Digit3: "c3", Digit4: "c4" };
 addEventListener("keydown", e => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return; // typing initials / focused button
   const c = BIND[e.code];
@@ -435,12 +446,16 @@ addEventListener("keydown", e => {
   if (c === "restart") { if (!e.repeat && (state === "play" || state === "over" || state === "menu")) startPlay(); e.preventDefault(); return; }
   if (c === "chchar") { if (!e.repeat && state !== "select") gotoSelect(); return; }
   if (c === "mute") { if (!e.repeat) toggleMute(); return; }
-  if (c === "c1" || c === "c2" || c === "c3") {
-    if (state === "select") pickCharacter(CHAR_IDS["c1c2c3".indexOf(c) / 2 | 0]);
+  if (c[0] === "c" && c.length === 2) { // c1..cN — number keys pick a hero
+    const i = +c[1] - 1;
+    if (state === "select" && i < CHAR_IDS.length) pickCharacter(CHAR_IDS[i]);
     return;
   }
   keys.add(c);
-  if (c === "jump") e.preventDefault();
+  // jump is queued from the press event, not polled as a held state: a fast
+  // double-tap can release and re-press inside a single frame, and a poll
+  // would never see the gap. e.repeat filters the OS key-repeat.
+  if (c === "jump") { if (!e.repeat) jumpQueued = true; e.preventDefault(); }
 });
 addEventListener("keyup", e => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return;
@@ -473,7 +488,9 @@ function gamepadInput(out) {
     camYaw -= dz(gp.axes[2] || 0) * 0.045;
     camPitch = Math.min(1.15, Math.max(-0.3, camPitch + dz(gp.axes[3] || 0) * 0.035));
     if (gp.buttons[7] && gp.buttons[7].value > 0.3) out.sprint = true;
-    if (gp.buttons[0] && gp.buttons[0].pressed) out.jump = true;
+    const jb = gp.buttons[0] && gp.buttons[0].pressed;
+    if (jb && !out._jump) out.jump = true; // edge-triggered, so holding A is one jump
+    out._jump = jb;
     const start = gp.buttons[9] && gp.buttons[9].pressed;
     if (start && !out._start) out.restart = true; // edge-triggered
     out._start = start;
@@ -692,6 +709,7 @@ function showOverlay(kind, data) {
   el.overlay.classList.remove("hidden");
   el.overlay.scrollTop = 0; // each screen starts at the top, not wherever the last one left off
   el.card.classList.toggle("wide", kind === "select" || kind === "flavors");
+  el.card.classList.toggle("heroes", kind === "select"); // extra width for the hero row
   if (kind === "select") {
     const cardHtml = CHAR_IDS.map((id, i) => {
       const c = STR.chars[id];
@@ -773,6 +791,7 @@ function fmtTime(s) { const m = (s / 60) | 0, ss = (s % 60) | 0; return m > 0 ? 
 // ---------- game state ----------
 let state = "select", runCount = 0;
 let bar, score, survived, simT, px, pz, py, vy, vx, vz, heading, jumpY, grounded, walkCycle, respawnQ, collected;
+let jumpsLeft = 0, jumpQueued = false; // jumps remaining this airtime; one-shot press flag
 let danceT = 0;        // sim: seconds of boogie left (day capture)
 let showT = 0;         // presentation: seconds of sky show left (night capture)
 let showFxT = 0;       // spawn cadence accumulator for comets/fireworks
@@ -784,6 +803,7 @@ function resetRun() {
   layoutNodes(BASE_SEED + runCount - 1);
   bar = CFG.barMax; score = 0; survived = START_T; simT = START_T; collected = 0;
   px = 0; pz = 0; py = terrainH(0, 0); vx = 0; vz = 0; vy = 0; jumpY = 0; grounded = true;
+  jumpsLeft = CFG.jumps; jumpQueued = false;
   heading = 0; walkCycle = 0; camYaw = 0; camPitch = 0.42;
   danceT = 0; showT = 0; showFxT = 0; confettiT = 0;
   respawnQ = [];
@@ -993,12 +1013,18 @@ function step(dt) {
   const pr = Math.hypot(px, pz);
   if (pr > CFG.playableR) { px *= CFG.playableR / pr; pz *= CFG.playableR / pr; }
 
-  // hop (cosmetic verb — never required to reach a node)
-  if ((keys.has("jump") || padState.jump || touchJumpQueued) && grounded && danceT <= 0) { vy = CFG.jumpV; grounded = false; }
-  padState.jump = false; touchJumpQueued = false;
+  // hop, then one air-jump (cosmetic verbs — never required to reach a node).
+  // All three inputs arrive as one-shot presses, so holding spends one jump.
+  if ((jumpQueued || padState.jump || touchJumpQueued) && jumpsLeft > 0 && danceT <= 0) {
+    const air = jumpsLeft < CFG.jumps;
+    vy = CFG.jumpV * (air ? CFG.jump2Mult : 1); // reset, not added — a clean second kick
+    grounded = false; jumpsLeft--;
+    if (air) spawnAirKick(px, terrainH(px, pz) + jumpY + 0.2, pz);
+  }
+  jumpQueued = false; padState.jump = false; touchJumpQueued = false;
   if (!grounded) {
     jumpY += vy * dt; vy -= CFG.gravity * dt;
-    if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; }
+    if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; jumpsLeft = CFG.jumps; }
   }
 
   // --- the one bar ---
@@ -1082,7 +1108,7 @@ function animateRig(r, realDt) {
       r.legR.rotation.x = Math.max(0, -Math.sin(ph)) * 0.9;
       r.group.rotation.z = Math.sin(ph) * 0.14;
       bounce = Math.abs(Math.sin(ph)) * 0.14;
-    } else {
+    } else if (r.dance === "pronk") {
       // goat pronk: stiff-legged hops + headbanging, cask swinging
       r.armL.rotation.x = 0.5; r.armR.rotation.x = 0.5;
       r.legL.rotation.x = -0.4; r.legR.rotation.x = -0.4;
@@ -1090,6 +1116,19 @@ function animateRig(r, realDt) {
       if (r.head) r.head.rotation.x = Math.sin(ph * 2.8) * 0.55;
       if (r.cask) r.cask.rotation.x = Math.sin(ph * 2.8) * 0.3;
       r.group.rotation.y = Math.sin(ph * 0.4) * 0.6;
+    } else {
+      // budtender: deep sumo squats, both joints up to the mouth on every rise
+      const squat = (Math.sin(ph * 1.6) + 1) * 0.5;  // 1 = down in the squat
+      const drag = Math.max(0, Math.sin(ph * 1.6));  // peaks as he comes back up
+      // +x swings the arm forward (matches the walk cycle); -x would throw both
+      // hands out behind him
+      r.armL.rotation.set(1.9 * drag, 0, -0.12 + 0.5 * drag);
+      r.armR.rotation.set(1.9 * drag, 0, 0.12 - 0.5 * drag);
+      r.legL.rotation.set(squat * 0.35, 0, -squat * 0.3); // knees splay outward
+      r.legR.rotation.set(squat * 0.35, 0, squat * 0.3);
+      bounce = 0.17 - squat * 0.17;                       // drops, never sinks
+      if (r.head) r.head.rotation.x = -drag * 0.3;        // chin up on the inhale
+      r.group.rotation.y = Math.sin(ph * 0.45) * 0.3;
     }
   } else {
     const swing = Math.sin(walkCycle * 3) * 0.55 * lean;
@@ -1100,7 +1139,22 @@ function animateRig(r, realDt) {
     if (r.cask) r.cask.rotation.x = swing * 0.15;
   }
   if (r.boa) { r.boa.rotation.y += realDt * 0.6; r.boa.rotation.z = Math.sin(walkCycle * 2 + performance.now() * 0.002) * 0.07; }
+  animateSmoke(r);
   return bounce;
+}
+
+// Cigarette smoke: each puff runs the same 0→1 life on a staggered offset —
+// rising, spreading, fading — then snaps back to the hand. One shared clock so
+// the cadence can speed up mid-dance without the puffs jumping position.
+let smokeT = 0;
+function animateSmoke(r) {
+  if (!r.smoke) return;
+  for (const p of r.smoke.puffs) {
+    const k = (smokeT + p.off) % 1;
+    p.o.position.set(p.x + p.drift * k + Math.sin(k * 5 + p.off * 9) * 0.04, p.y + k * 0.6, p.z - k * 0.05);
+    p.o.scale.setScalar(0.35 + k * 1.7);
+    p.o.material.opacity = 0.42 * Math.min(1, k * 7) * (1 - k) ** 1.5;
+  }
 }
 
 // ---------- per-frame presentation ----------
@@ -1108,6 +1162,7 @@ let prevShow = 0;
 function present(realDt) {
   const phase = (simT % CFG.dayLen) / CFG.dayLen;
   updateSky(phase);
+  smokeT = (smokeT + realDt * (danceT > 0 ? 1.1 : 0.42)) % 1;
 
   // logo eases toward the camera's current bearing so it reliably drifts
   // back into frame instead of staying lost behind the player
@@ -1133,6 +1188,7 @@ function present(realDt) {
       r.armR.rotation.z = 0.2 - Math.sin(t * 1.7 + i) * 0.12;
       if (r.boa) r.boa.rotation.y += realDt * 0.5;
       if (r.head) r.head.rotation.y = Math.sin(t * 0.7 + i * 1.3) * 0.3;
+      animateSmoke(r);
     });
     camera.position.lerp(tmpV2.set(0, terrainH(0, 0) + 1.85, 0.6), Math.min(1, 6 * realDt));
     camera.lookAt(0, terrainH(0, -3.6) + 1.05, -3.6);
@@ -1348,7 +1404,8 @@ if (DEV || SMOKE) {
       }
       return { camYaw, camPitch, logoYaw, logoPos: logoSprite ? logoSprite.position.toArray() : null, camPos: camera.position.toArray(), px, pz, local, inView,
         opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor,
-        simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state };
+        simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state,
+        jumpY, vy, grounded, jumpsLeft };
     },
     magnet: () => { // teleport onto the nearest active gummy (capture test)
       let bi = -1, bd = 1e9;

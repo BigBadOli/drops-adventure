@@ -2,6 +2,7 @@
 //   rave  : 128 bpm four-on-the-floor, saw bass, square arp, claps
 //   folk  : 92 bpm fingerpicked triangle guitar, warm walking bass
 //   polka : 138 bpm oompah tuba + offbeat squeeze-box chords, jaunty melody
+//   metal : 168 bpm palm-muted chug + tremolo lead through a waveshaper, double kick
 // Lookahead scheduler (~120 ms) so tab jank never drops the groove.
 const N = n => 440 * Math.pow(2, (n - 69) / 12); // midi → Hz
 
@@ -48,6 +49,26 @@ export function makeMusic(ctx, dest) {
     f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 1.2;
     s.connect(f); f.connect(env(t, g, 0.12));
     s.start(t); s.stop(t + 0.16);
+  }
+  // Shared clipping curve — the only thing that makes a sawtooth read as a
+  // guitar amp rather than a synth lead. Built once, reused by every note.
+  let distCurve = null;
+  function guitar(t, freq, g, dur, lp = 2200) {
+    if (!distCurve) {
+      distCurve = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) {
+        const x = (i / 1023) * 2 - 1, k = 64;
+        distCurve[i] = ((3 + k) * x * 0.35) / (Math.PI + k * Math.abs(x));
+      }
+    }
+    const o = ctx.createOscillator();
+    o.type = "sawtooth"; o.frequency.value = freq;
+    const ws = ctx.createWaveShaper();
+    ws.curve = distCurve; ws.oversample = "2x";
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass"; f.frequency.value = lp;
+    o.connect(ws); ws.connect(f); f.connect(env(t, g, dur));
+    o.start(t); o.stop(t + dur + 0.05);
   }
   function tone(t, freq, g, dur, type, lp) {
     const o = ctx.createOscillator();
@@ -100,6 +121,20 @@ export function makeMusic(ctx, dest) {
         const mel = [77, 77, 76, 74, 72, 74, 76, 77, 79, 77, 76, 74, 72, 0, 74, 0][b];
         if (mel) tone(t, N(mel), 0.09, 0.13, "square", 4000);
         if (b === 0 || b === 6) hat(t, 0.07, 0.03); // clip-clop
+      },
+    },
+    metal: {
+      bpm: 168, div: 4, // 16ths
+      seq(s, t) {
+        const b = s % 32;
+        if (b % 2 === 0 || b % 8 === 3) kick(t, 0.4);   // double-kick gallop
+        if (b % 8 === 4) clap(t, 0.24);                 // backbeat snare
+        hat(t, b % 4 === 0 ? 0.05 : 0.025, 0.03);
+        // palm-muted chug on a low root, opening into a descending run
+        const chug = [40, 40, 40, 40, 40, 43, 40, 41, 40, 40, 40, 40, 46, 45, 43, 41][b % 16];
+        guitar(t, N(chug), 0.26, b % 4 === 0 ? 0.13 : 0.07, 900);
+        // tremolo-picked lead over the back half of the phrase (phrygian b2)
+        if (b >= 16) guitar(t, N([64, 64, 65, 65, 67, 67, 65, 64][b % 8]), 0.075, 0.07, 3400);
       },
     },
   };

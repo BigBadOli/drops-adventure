@@ -14,12 +14,14 @@ Serve the folder over HTTP (ES modules + texture loading don't work from `file:/
 npm run dev            # http://localhost:8787
 ```
 
-- **Pick a hero** on the opening screen (click a card, or press 1/2/3):
+- **Pick a hero** on the opening screen (click a card, or press 1/2/3/4):
   - **Kiki** the rave girl — pink boa, dance outfit, 128 bpm rave soundtrack
   - **Gus** the mountain man — backpack & bedroll, folk-picking soundtrack
   - **Barnaby** the billy goat — horns & wine cask, oompah polka soundtrack
+  - **Reggie** the budtender — afro & leather, trailing smoke, death metal riff
 - WASD/arrows move (keys steer the character) · mouse orbits the camera ·
-  Shift sprint · Space hop · R restart · C or 🎭 switch hero · M or 🔊 mute ·
+  Shift sprint · Space hop (tap twice for a double jump) · R restart ·
+  C or 🎭 switch hero · M or 🔊 mute ·
   ☰ pause menu · 🏁 stop & save your score
 - Walk into the **wiggling gummy cubes** (1/5 your size) to refill gummy power.
   All **11 Drops flavors** spawn (Evergreen, Formula One, Beethoven, River
@@ -76,5 +78,5 @@ the live project.
 - Music is generated per-character with WebAudio in `js/music.js` (no audio
   files needed beyond the two sfx).
 - Character rigs are procedural (`js/characters.js`) and share one animation
-  interface, so the walk/dance code drives all three heroes.
+  interface, so the walk/dance code drives every hero.
 - Gummy flavors/colors live in `GUMMY_FLAVORS` in `js/style.js`.

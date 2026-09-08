@@ -1,10 +1,15 @@
-// Procedural low-poly playable characters. All three share a rig interface:
-// { group, armL, armR, legL, legR, head, boa?, cask?, mats, dance, height }
+// Procedural low-poly playable characters. All four share a rig interface:
+// { group, armL, armR, legL, legR, head, boa?, cask?, smoke?, mats, dance, height }
 // Face points -z (matches the sim's heading math). Height ~1.7 world units.
+//
+// `mats` is every material the night-glow sweep should brighten (game.js
+// overwrites emissiveIntensity on each one per frame) — register via the local
+// M() helper. Materials that need to keep their own glow (the budtender's lit
+// joint tips) or their own alpha (his smoke puffs) are built outside it.
 import * as THREE from "../vendor/three.module.js";
 
-export const CHAR_IDS = ["rave", "mountain", "goat"];
-export const MUSIC_STYLE = { rave: "rave", mountain: "folk", goat: "polka" };
+export const CHAR_IDS = ["rave", "mountain", "goat", "budtender"];
+export const MUSIC_STYLE = { rave: "rave", mountain: "folk", goat: "polka", budtender: "metal" };
 
 function mat(color, rough = 0.85) {
   const m = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: rough, metalness: 0 });
@@ -199,8 +204,103 @@ function buildGoat() {
   return { group, armL, armR, legL, legR, head, cask, mats, dance: "pronk", height: 1.65 };
 }
 
+function buildBudtender() {
+  const group = new THREE.Group();
+  const mats = [];
+  const M = (c, r) => { const m2 = mat(c, r); mats.push(m2); return m2; };
+  // the jacket, the afro and the shades are all near-black, so the trim colors
+  // are pulled well apart from each other or the whole figure reads as one blob
+  const skin = M(0x8d5524), leather = M(0x1f1b24, 0.35), leatherD = M(0x453d4e, 0.4),
+    denim = M(0x2f4f7a), denimD = M(0x243d60), slipper = M(0xb9a184), hair = M(0x140f12),
+    tee = M(0x5d5866), dark = M(0x0d0b10), paper = M(0xe8e2d2);
+  // lit ends keep their own glow, so they stay out of `mats` (see header)
+  const ember = mat(0xff7a1a, 0.9);
+  ember.emissive.setHex(0xff5a00); ember.emissiveIntensity = 1.6;
+
+  // short thick legs, set wide — skinny denim stretched over them
+  const legL = new THREE.Group(), legR = new THREE.Group();
+  for (const [pivot, sx] of [[legL, -1], [legR, 1]]) {
+    pivot.position.set(sx * 0.17, 0.44, 0);
+    mesh(new THREE.CapsuleGeometry(0.135, 0.16, 3, 6), denim, 0, -0.16, 0, pivot);
+    mesh(new THREE.CylinderGeometry(0.075, 0.07, 0.09, 6), denimD, 0, -0.33, 0, pivot); // tapered cuff
+    const sl = mesh(new THREE.BoxGeometry(0.15, 0.07, 0.27), slipper, 0, -0.39, -0.04, pivot);
+    sl.rotation.x = 0.04;
+    group.add(pivot);
+  }
+  // wide low-slung torso + belly overhang, in a black leather jacket
+  const torso = mesh(new THREE.CapsuleGeometry(0.3, 0.14, 4, 10), leather, 0, 0.78, 0, group);
+  torso.scale.set(1.2, 1, 1.0);
+  const belly = mesh(new THREE.SphereGeometry(0.28, 10, 8), leather, 0, 0.63, -0.04, group);
+  belly.scale.set(1.14, 0.8, 1.02);
+  mesh(new THREE.CylinderGeometry(0.3, 0.31, 0.07, 10), leatherD, 0, 0.48, 0, group).scale.set(1.15, 1, 1.02); // hem
+  // open front: a narrow strip of tee framed by two lapels in the jacket's own
+  // black, so the chest stays a dark mass with one light seam down it
+  mesh(new THREE.BoxGeometry(0.13, 0.32, 0.06), tee, 0, 0.87, -0.28, group);
+  for (const sx of [-1, 1]) {
+    const lap = mesh(new THREE.BoxGeometry(0.11, 0.4, 0.06), leather, sx * 0.13, 0.88, -0.29, group);
+    lap.rotation.z = sx * 0.24;
+  }
+  const collar = mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.1, 10), leatherD, 0, 1.09, -0.02, group);
+  collar.rotation.x = -0.12;
+  // arms, each pinching a lit joint angled up and away from the body
+  const armL = new THREE.Group(), armR = new THREE.Group();
+  for (const [pivot, sx] of [[armL, -1], [armR, 1]]) {
+    pivot.position.set(sx * 0.4, 0.99, 0);
+    mesh(new THREE.CapsuleGeometry(0.1, 0.16, 3, 6), leather, 0, -0.15, 0, pivot);
+    mesh(new THREE.CylinderGeometry(0.105, 0.095, 0.06, 8), leatherD, 0, -0.29, 0, pivot);
+    mesh(new THREE.SphereGeometry(0.095, 8, 6), skin, 0, -0.35, 0, pivot);
+    // held out to the side, angled up and away — the ember rides the joint as a
+    // child so the tip stays put if the angle is ever tweaked
+    const j = mesh(new THREE.CylinderGeometry(0.017, 0.027, 0.16, 6), paper, sx * 0.05, -0.41, -0.09, pivot);
+    j.rotation.set(-1.3, 0, sx * 0.45);
+    mesh(new THREE.SphereGeometry(0.023, 6, 5), ember, 0, 0.088, 0, j);
+    pivot.rotation.z = sx * -0.16;
+    group.add(pivot);
+  }
+  // smoke: puffs rise from each hand's resting height and recycle. Parented to
+  // the body rather than the arms, so waving them about during the dance
+  // doesn't drag the whole column around with them.
+  const smoke = new THREE.Group();
+  smoke.puffs = [];
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 5; i++) {
+      const pm = new THREE.MeshStandardMaterial({ color: 0xcfcfd6, flatShading: true,
+        roughness: 1, metalness: 0, transparent: true, opacity: 0, depthWrite: false });
+      const x = sx * 0.46, y = 0.68, z = -0.2;
+      const o = mesh(new THREE.IcosahedronGeometry(0.05, 0), pm, x, y, z, smoke);
+      smoke.puffs.push({ o, x, y, z, off: i / 5 + (sx > 0 ? 0.09 : 0), drift: sx * 0.05 });
+    }
+  }
+  group.add(smoke);
+  // head sits straight on the shoulders — no neck — under a big faceted afro
+  const head = new THREE.Group();
+  head.position.set(0, 1.28, 0);
+  mesh(new THREE.SphereGeometry(0.19, 12, 10), skin, 0, 0, 0, head);
+  // afro sits high and back — the lumps only run the rear arc, or they swallow
+  // the shades and he loses a face entirely
+  const afro = mesh(new THREE.IcosahedronGeometry(0.28, 0), hair, 0, 0.11, 0.07, head);
+  afro.scale.set(1.1, 0.95, 0.9);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 4) * Math.PI;
+    const lump = mesh(new THREE.IcosahedronGeometry(0.11, 0), hair,
+      Math.cos(a) * 0.24, 0.1 + Math.sin(a) * 0.14, Math.sin(a) * 0.18 + 0.04, head);
+    lump.scale.setScalar(0.85 + ((i * 41) % 7) * 0.06);
+  }
+  mesh(new THREE.IcosahedronGeometry(0.1, 0), hair, 0.04, 0.29, 0.06, head);
+  const shades = mesh(new THREE.BoxGeometry(0.29, 0.075, 0.09), dark, 0, 0.01, -0.2, head);
+  shades.rotation.x = 0.06;
+  mesh(new THREE.SphereGeometry(0.045, 6, 5), skin, 0, -0.06, -0.21, head); // nose
+  const goatee = mesh(new THREE.ConeGeometry(0.07, 0.16, 6), hair, 0, -0.18, -0.13, head);
+  goatee.rotation.x = Math.PI + 0.3;
+  group.add(head);
+  group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  for (const p of smoke.puffs) p.o.castShadow = false; // shadowed smoke reads as confetti
+  return { group, armL, armR, legL, legR, head, smoke, mats, dance: "smoke", height: 1.55 };
+}
+
 export function buildCharacter(id) {
   if (id === "rave") return buildRave();
   if (id === "mountain") return buildMountain();
-  return buildGoat();
+  if (id === "goat") return buildGoat();
+  return buildBudtender();
 }
