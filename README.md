@@ -31,6 +31,11 @@ npm run dev            # http://localhost:8787
   - **Daytime capture** → your hero locks into a signature boogie with confetti.
   - **Night capture** → dazzling sky show: flaring stars, comets, colorful
     firework explosions.
+- **Leap off the island to end a run.** The shoreline blocks you on foot, but
+  jump as you reach it and you sail clean over — a committed arc out to sea
+  with no way to steer back, ending in a splashdown. Your score banks exactly
+  as it does with 🏁. Spend the air-jump mid-leap for extra hang time and a
+  longer flight.
 - **Switching heroes mid-run keeps your run** (score, position, clock).
 - The **Drops logo** floats in the far sky and glows brighter at night.
 - Survive the day/night cycle; the power bar always drains, sprint drains faster.

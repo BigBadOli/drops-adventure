@@ -26,6 +26,7 @@ export const STR = {
   restartHintTouch: "Tap Play Again · tap 🎭 to switch hero",
   playAgain: "PLAY AGAIN",
   runOver: "Adventure complete!",
+  leaped: "Off the edge of the world!",
   resume: "RESUME",
   menuHint: "☰ — pause · 🏁 — stop & save score · 🎭 / C — switch hero (keeps your run) · M — mute",
   menuHintTouch: "☰ — pause · 🏁 — stop & save score · 🎭 — switch hero (keeps your run) · 🔊 — mute",

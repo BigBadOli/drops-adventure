@@ -15,6 +15,7 @@ const CFG = {
   barMax: 100, drain: 1.6, sprintMult: 2.5, refill: 20,
   walk: 5, sprint: 8, collectR: 1.45,
   dayLen: 120, jumpV: 4.6, gravity: 12, jumps: 2, jump2Mult: 0.88,
+  fallGrav: 7, fallSink: 1.1, sinkLen: 0.85, // the leap: floatier than a hop, then a slow sink
   camDist: 7.2, camSens: 0.0023,
   danceLen: 2.6, showLen: 4.5,
 };
@@ -167,12 +168,13 @@ const LOGO_DIST = 200, LOGO_H = 40;
 }
 
 // water
+const WATER_Y = -0.35; // sea level — also where a leap off the island splashes down
 {
   const geo = new THREE.CircleGeometry(320, 48);
   geo.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ color: PAL.water, roughness: 0.3, metalness: 0.08, emissive: 0x0d3a42, emissiveIntensity: 0.5 });
   const water = new THREE.Mesh(geo, mat);
-  water.position.y = -0.35;
+  water.position.y = WATER_Y;
   scene.add(water);
 }
 
@@ -351,6 +353,12 @@ function spawnBurst(x, y, z, colorHex) {
 // pale tight clump vanishes against sunlit grass.
 function spawnAirKick(x, y, z) {
   firePool(bursts, burstIdx++, x, y, z, 0xfff2cc, 3.4, -0.8, 0.5, 2.2);
+}
+// splashdown at the end of a leap — two overlapping sprays so it reads as a
+// column of water rather than one puff
+function spawnSplash(x, z) {
+  firePool(bursts, burstIdx++, x, WATER_Y, z, 0xd6f2f7, 3.2, 4.2, 0.9, 8);
+  firePool(bursts, burstIdx++, x, WATER_Y, z, 0x8fd8e4, 5.0, 2.2, 0.75, 9);
 }
 function spawnFirework(x, y, z, colorHex) {
   firePool(fireworks, fwIdx++, x, y, z, colorHex, 12, 2.0, 1.5, 2.2);
@@ -761,7 +769,7 @@ function showOverlay(kind, data) {
          <div class="lbForm"><input id="lbInit" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA">
          <button id="lbSaveBtn" class="ctaBtn" style="margin-top:0">${STR.lbSave}</button></div>`
       : `<div id="lbBox">${lbTableHtml(lbLoad(), data.justSaved, false)}</div>`;
-    el.card.innerHTML = `<h1>${data.stopped ? STR.runOver : STR.gameOver}</h1>
+    el.card.innerHTML = `<h1>${data.title || (data.stopped ? STR.runOver : STR.gameOver)}</h1>
       <div class="big">${STR.finalScore}: <b>${data.score}</b> · ${STR.finalTime}: <b>${data.time}${STR.seconds}</b></div>
       ${mid}
       <button id="againBtn" class="ctaBtn">${STR.playAgain}</button>
@@ -792,6 +800,7 @@ function fmtTime(s) { const m = (s / 60) | 0, ss = (s % 60) | 0; return m > 0 ? 
 let state = "select", runCount = 0;
 let bar, score, survived, simT, px, pz, py, vy, vx, vz, heading, jumpY, grounded, walkCycle, respawnQ, collected;
 let jumpsLeft = 0, jumpQueued = false; // jumps remaining this airtime; one-shot press flag
+let falling = false, sinkT = 0; // leapt the shoreline; seconds of sinking left after the splash
 let danceT = 0;        // sim: seconds of boogie left (day capture)
 let showT = 0;         // presentation: seconds of sky show left (night capture)
 let showFxT = 0;       // spawn cadence accumulator for comets/fireworks
@@ -803,7 +812,7 @@ function resetRun() {
   layoutNodes(BASE_SEED + runCount - 1);
   bar = CFG.barMax; score = 0; survived = START_T; simT = START_T; collected = 0;
   px = 0; pz = 0; py = terrainH(0, 0); vx = 0; vz = 0; vy = 0; jumpY = 0; grounded = true;
-  jumpsLeft = CFG.jumps; jumpQueued = false;
+  jumpsLeft = CFG.jumps; jumpQueued = false; falling = false; sinkT = 0;
   heading = 0; walkCycle = 0; camYaw = 0; camPitch = 0.42;
   danceT = 0; showT = 0; showFxT = 0; confettiT = 0;
   respawnQ = [];
@@ -881,7 +890,7 @@ function closeStopPreview() { // RESUME — the run keeps going untouched
   hideOverlay();
   updateButtons();
 }
-function gameOver(stopped) {
+function gameOver(stopped, title) {
   state = "over";
   runActive = false;
   playSfx("over", 0.42);
@@ -889,7 +898,7 @@ function gameOver(stopped) {
   const t = Math.round(survived);
   if (score > best) { best = score; try { localStorage.setItem("drops_best_gummies", String(best)); } catch (e) {} }
   if (document.pointerLockElement) document.exitPointerLock();
-  showOverlay("over", { score, time: t, best, stopped });
+  showOverlay("over", { score, time: t, best, stopped, title });
   updateButtons();
 }
 el.overlay.addEventListener("click", () => {
@@ -983,6 +992,7 @@ function step(dt) {
   let sprint = keys.has("sprint") || padState.sprint || touchSprint;
   if (botWish) { ix = botWish.x; iy = botWish.z; sprint = botWish.sprint; }
   if (danceT > 0) { danceT -= dt; ix = 0; iy = 0; sprint = false; } // boogie lock
+  if (falling) { ix = 0; iy = 0; sprint = false; } // past the shoreline, the leap is committed
   const il = Math.hypot(ix, iy);
   let wx = 0, wz = 0;
   if (il > 0.01) {
@@ -996,12 +1006,14 @@ function step(dt) {
   }
   const moving = il > 0.01;
   const spd = sprint && moving ? CFG.sprint : CFG.walk;
-  vx += (wx * spd - vx) * Math.min(1, 10 * dt);
-  vz += (wz * spd - vz) * Math.min(1, 10 * dt);
+  if (!falling) { // mid-leap the hero coasts on the momentum they jumped with
+    vx += (wx * spd - vx) * Math.min(1, 10 * dt);
+    vz += (wz * spd - vz) * Math.min(1, 10 * dt);
+  }
   px += vx * dt; pz += vz * dt;
 
   // colliders (trees/rocks) — circle push-out
-  for (let i = 0; i < colliders.length; i++) {
+  if (!falling) for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
     const dx = px - c.x, dz = pz - c.z, d2 = dx * dx + dz * dz, rr = c.r + 0.5;
     if (d2 < rr * rr && d2 > 1e-6) {
@@ -1009,27 +1021,45 @@ function step(dt) {
       px = c.x + (dx / d) * rr; pz = c.z + (dz / d) * rr;
     }
   }
-  // island bound — the water blocks
+  // island bound — the water blocks you on foot, but an airborne hero sails
+  // straight over it and commits to the fall. That leap is the one deliberate
+  // way to end a run early, and it banks the score exactly like 🏁 does.
   const pr = Math.hypot(px, pz);
-  if (pr > CFG.playableR) { px *= CFG.playableR / pr; pz *= CFG.playableR / pr; }
+  if (!falling && pr > CFG.playableR) {
+    if (grounded) { px *= CFG.playableR / pr; pz *= CFG.playableR / pr; }
+    else { falling = true; py = terrainH(px, pz) + jumpY; jumpY = 0; } // hop offset → world height
+  }
 
   // hop, then one air-jump (cosmetic verbs — never required to reach a node).
   // All three inputs arrive as one-shot presses, so holding spends one jump.
-  if ((jumpQueued || padState.jump || touchJumpQueued) && jumpsLeft > 0 && danceT <= 0) {
+  // the air-jump still works past the shoreline, so a well-timed second kick
+  // buys hang time and a longer arc out to sea — it just can't steer you back
+  if ((jumpQueued || padState.jump || touchJumpQueued) && jumpsLeft > 0 && danceT <= 0 && sinkT <= 0) {
     const air = jumpsLeft < CFG.jumps;
     vy = CFG.jumpV * (air ? CFG.jump2Mult : 1); // reset, not added — a clean second kick
     grounded = false; jumpsLeft--;
-    if (air) spawnAirKick(px, terrainH(px, pz) + jumpY + 0.2, pz);
+    if (air) spawnAirKick(px, (falling ? py : terrainH(px, pz) + jumpY) + 0.2, pz);
   }
   jumpQueued = false; padState.jump = false; touchJumpQueued = false;
-  if (!grounded) {
+  if (falling) {
+    // py is a world height out here, not a hop above the ground
+    if (sinkT > 0) {
+      sinkT -= dt; py -= CFG.fallSink * dt; // settle under the surface, out of sight
+      if (sinkT <= 0) { gameOver(true, STR.leaped); return; }
+    } else {
+      vy -= CFG.fallGrav * dt; py += vy * dt;
+      if (py <= WATER_Y) { py = WATER_Y; vy = 0; sinkT = CFG.sinkLen; spawnSplash(px, pz); }
+    }
+  } else if (!grounded) {
     jumpY += vy * dt; vy -= CFG.gravity * dt;
     if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; jumpsLeft = CFG.jumps; }
   }
 
-  // --- the one bar ---
-  bar -= CFG.drain * (sprint && moving ? CFG.sprintMult : 1) * dt;
-  if (bar <= 0) { bar = 0; gameOver(); return; }
+  // --- the one bar --- (a committed leap outruns the sugar crash)
+  if (!falling) {
+    bar -= CFG.drain * (sprint && moving ? CFG.sprintMult : 1) * dt;
+    if (bar <= 0) { bar = 0; gameOver(); return; }
+  }
 
   // --- collect: day → dance, night → sky show ---
   // isNight uses the exact same phase boundary as the HUD's day/night label
@@ -1077,7 +1107,7 @@ function step(dt) {
     heading += d * Math.min(1, 12 * dt);
   }
   walkCycle += speed2 * dt * 2.2;
-  py = terrainH(px, pz);
+  if (!falling) py = terrainH(px, pz); // mid-leap py is driven by the fall, not the ground
 }
 
 // ---------- character animation (walk + per-style dance) ----------
@@ -1405,7 +1435,7 @@ if (DEV || SMOKE) {
       return { camYaw, camPitch, logoYaw, logoPos: logoSprite ? logoSprite.position.toArray() : null, camPos: camera.position.toArray(), px, pz, local, inView,
         opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor,
         simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state,
-        jumpY, vy, grounded, jumpsLeft };
+        jumpY, vy, grounded, jumpsLeft, falling, sinkT, pr: Math.hypot(px, pz) };
     },
     magnet: () => { // teleport onto the nearest active gummy (capture test)
       let bi = -1, bd = 1e9;
