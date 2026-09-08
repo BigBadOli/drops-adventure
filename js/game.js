@@ -12,9 +12,11 @@ import { makeMusic } from "./music.js";
 const CFG = {
   islandR: 60, playableR: 50.5, spawnMargin: 8, // hard wall on dry sand — no wading
   spawnPoints: 30, activeNodes: 12, respawn: 10, perchNodes: 8,
+  perchMinH: 0.9, perchReachH: 1.2, // a perch must be worth climbing, and needs climbing
   barMax: 100, drain: 1.6, sprintMult: 2.5, refill: 20,
   walk: 5, sprint: 8, collectR: 1.45,
   dayLen: 120, jumpV: 4.6, gravity: 12, jumps: 2, jump2Mult: 0.88,
+  ledge: 0.45, // how far below a platform's top still counts as being on it
   fallGrav: 7, fallSink: 1.1, sinkLen: 0.85, // the leap: floatier than a hop, then a slow sink
   camDist: 7.2, camSens: 0.0023,
   danceLen: 2.6, showLen: 4.5,
@@ -318,7 +320,14 @@ function buildFlora(cfg) {
       dummy.updateMatrix();
       if (collideR || topFn) {
         const c = { x: pt.x, z: pt.z, r: (collideR || 0) * pt.s };
-        if (topFn) { c.top = topFn(pt); c.topR = (topFn.radius || collideR || 1) * pt.s * 0.82; }
+        if (topFn) {
+          c.top = topFn(pt);
+          // The standable area must not be much smaller than the push-out
+          // radius, or there is a ring of dead space you have to cross in
+          // mid-air before the top will hold you — which reads as the jump
+          // failing for no visible reason.
+          c.topR = Math.max((topFn.radius || collideR || 1) * pt.s, c.r + 0.3);
+        }
         colliders.push(c);
       }
       return dummy.matrix.clone();
@@ -383,7 +392,7 @@ function buildFlora(cfg) {
   } else {
     const pinePts = scatter(52, 8, 47, 3.2), leafPts = scatter(34, 8, 46, 3.4);
     makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(pal.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75,
-      Object.assign(pt => ground(pt) + 3.2 * pt.s, { radius: 0.5 })); // pine tip
+      Object.assign(pt => ground(pt) + 3.1 * pt.s, { radius: 0.72 })); // pine tip
     makeInstanced(new THREE.CylinderGeometry(0.16, 0.24, 1.0, 6), flat(pal.trunk), pinePts, pt => ground(pt) + 0.45 * pt.s, 0);
     const leafGeo = new THREE.IcosahedronGeometry(1.5, 0); leafGeo.scale(1, 0.85, 1);
     makeInstanced(leafGeo, flat(pal.leaf), leafPts, pt => ground(pt) + 1.95 * pt.s, 0.75,
@@ -392,7 +401,7 @@ function buildFlora(cfg) {
   }
   const rockGeo = new THREE.IcosahedronGeometry(0.9, 0); rockGeo.scale(1.15, 0.75, 1);
   makeInstanced(rockGeo, flat(pal.rock, 0.98), rockPts, pt => ground(pt) + 0.25 * pt.s, 0.95,
-    Object.assign(pt => ground(pt) + 0.9 * pt.s, { radius: 0.95 })); // rocks are the everyday platform
+    Object.assign(pt => ground(pt) + 0.82 * pt.s, { radius: 1.0 })); // rocks are the everyday platform
   buildBeacon(cfg);
 }
 
@@ -514,7 +523,9 @@ function layoutNodes(seed) {
   // never near spawn, so the opening gummy is always a simple walk.
   const reach = (CFG.jumpV ** 2 / (2 * CFG.gravity * P().gravity)) * 1.78 * 0.85;
   const perches = colliders.filter(c => c.top !== undefined &&
-    c.top - terrainH(c.x, c.z) <= reach && Math.hypot(c.x, c.z) > 14 &&
+    c.top - terrainH(c.x, c.z) <= reach &&
+    c.top - terrainH(c.x, c.z) >= CFG.perchMinH && // below this you could just reach up
+    Math.hypot(c.x, c.z) > 14 &&
     Math.hypot(c.x, c.z) < CFG.playableR - CFG.spawnMargin);
   for (let i = perches.length - 1; i > 0; i--) { // shuffle on the run seed
     const j = (logicRng() * (i + 1)) | 0;
@@ -540,6 +551,16 @@ function layoutNodes(seed) {
   for (let n = 0; n < CFG.activeNodes && idx.length; n++) {
     const k = idx.splice((logicRng() * idx.length) | 0, 1)[0];
     nodeState[k].active = true;
+  }
+  // Guarantee at least one perched gummy is live. On a world with only a
+  // handful of climbable spots the random draw can miss them entirely, and a
+  // feature nobody ever sees may as well not exist.
+  const perchIdx = [...nodePts.keys()].filter(i => nodePts[i].perched);
+  if (perchIdx.length && !perchIdx.some(i => nodeState[i].active)) {
+    const on = perchIdx[(logicRng() * perchIdx.length) | 0];
+    const offCandidates = [...nodePts.keys()].filter(i => nodeState[i].active && !nodePts[i].perched);
+    if (offCandidates.length) nodeState[offCandidates[(logicRng() * offCandidates.length) | 0]].active = false;
+    nodeState[on].active = true;
   }
   // tint each halo + gummy instance to its flavor color
   for (let i = 0; i < nodePts.length; i++) {
@@ -1305,7 +1326,7 @@ function supportH(x, z, feetY) {
   for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
     if (c.top === undefined || c.top <= h) continue;
-    if (feetY < c.top - 0.35) continue;          // below it — that's a wall, not a floor
+    if (feetY < c.top - CFG.ledge) continue;     // below it — that's a wall, not a floor
     const dx = x - c.x, dz = z - c.z;
     if (dx * dx + dz * dz > c.topR * c.topR) continue;
     if (c.top > h) h = c.top;
@@ -1449,7 +1470,12 @@ function step(dt) {
   const feetY = py + jumpY;
   if (!falling) for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
-    if (c.top !== undefined && feetY > c.top - 0.2) continue;
+    // Two ways a landable thing stops blocking you. Being above it is the
+    // obvious one. The other matters more: while you are still RISING, the
+    // push-out is off entirely, so you can jump straight at a rock and come
+    // down on top of it. Without this you get shoved sideways all the way up
+    // and have to arc onto it precisely, which is what felt clunky.
+    if (c.top !== undefined && (feetY > c.top - CFG.ledge || vy > 0)) continue;
     const dx = px - c.x, dz = pz - c.z, d2 = dx * dx + dz * dz, rr = c.r + 0.5;
     if (d2 < rr * rr && d2 > 1e-6) {
       const d = Math.sqrt(d2);
@@ -1507,7 +1533,7 @@ function step(dt) {
     // perched ones also need you up at their level — otherwise you would sweep
     // them off a toadstool cap by strolling underneath it. Ground gummies keep
     // the old height-blind rule, so nothing about them changes.
-    if (nodePts[i].perched && Math.abs((py + jumpY) - nodePts[i].y) > 2.2) continue;
+    if (nodePts[i].perched && Math.abs((py + jumpY) - nodePts[i].y) > CFG.perchReachH) continue;
     if (dx * dx + dz * dz < CFG.collectR * CFG.collectR) {
       nodeState[i].active = false;
       respawnQ.push({ at: simT + CFG.respawn, idx: i });
@@ -1559,7 +1585,10 @@ function step(dt) {
     } else {
       jumpY = feet - sup;
       py = sup;
-      if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; jumpsLeft = CFG.jumps; }
+      if (jumpY <= 0) {
+        if (vy < -3.2) spawnAirKick(px, sup + 0.15, pz); // dust on a real landing
+        jumpY = 0; vy = 0; grounded = true; jumpsLeft = CFG.jumps;
+      }
     }
   }
 }

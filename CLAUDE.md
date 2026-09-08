@@ -109,16 +109,20 @@ crowns, toadstool caps.
 
 Two rules make it work, and both matter:
 
-- The push-out is **skipped** once the hero's feet clear `top`, so an airborne
-  hero passes over a canopy instead of being shoved sideways off it.
+- The push-out is **skipped** once the hero's feet clear `top` — and also
+  whenever they are still rising (`vy > 0`). The second half matters more: it
+  lets you jump straight at a rock and come down on top of it, instead of being
+  shoved sideways the whole way up and having to arc on precisely.
 - `supportH()` returns the terrain *or* the top of a platform the hero is at or
   above, and `py` is set from that rather than straight from `terrainH()`. World
   height (`py + jumpY`) is preserved whenever the support changes, so stepping
   off a rock converts the drop into `jumpY` and falls under normal gravity
   instead of teleporting, and drifting over one lands on it.
 
-A platform's footprint (`topR`) is deliberately tighter than its push-out
-radius, so you can't perch on the lip of a rounded canopy.
+A platform's footprint (`topR`) is held at **least** `push-out radius + 0.3`.
+Making it smaller leaves a ring of dead space you have to cross in mid-air
+before the top will hold you, and the jump reads as failing for no visible
+reason — that was the original "clunky" feel.
 
 A share of the gummies (`CFG.perchNodes`) sit **on** those platforms. Which
 platforms qualify is computed per planet from the double-jump height
