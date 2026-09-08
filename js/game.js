@@ -312,7 +312,11 @@ function buildFlora(cfg) {
   // topFn, when given, makes this swarm landable: it returns the world height of
   // the surface you can stand on. The footprint is deliberately tighter than the
   // push-out radius, so you can't perch on the very lip of a rounded canopy.
-  function makeInstanced(geo, mat, pts, yFn, collideR, topFn) {
+  // topFn (landable) and blockFn (solid, but not standable — a stalk or trunk)
+  // both describe how tall the thing is. A collider must know that: without it
+  // a stalk keeps shoving you sideways even when you are stood on the cap four
+  // units above it, which reads as an invisible pillar through the platform.
+  function makeInstanced(geo, mat, pts, yFn, collideR, topFn, blockFn) {
     const mats = pts.map(pt => {
       dummy.position.set(pt.x, yFn(pt), pt.z);
       dummy.rotation.set(0, pt.rot, 0);
@@ -320,8 +324,10 @@ function buildFlora(cfg) {
       dummy.updateMatrix();
       if (collideR || topFn) {
         const c = { x: pt.x, z: pt.z, r: (collideR || 0) * pt.s };
+        if (blockFn) c.blockTop = blockFn(pt);
         if (topFn) {
           c.top = topFn(pt);
+          c.blockTop = c.top;
           // The standable area must not be much smaller than the push-out
           // radius, or there is a ring of dead space you have to cross in
           // mid-air before the top will hold you — which reads as the jump
@@ -341,7 +347,8 @@ function buildFlora(cfg) {
     // they read as landmarks you walk between rather than a forest
     const plantPts = scatter(30, 9, 46, 6.5);
     const stalkGeo = new THREE.CylinderGeometry(0.12, 0.28, 5.4, 6);
-    makeInstanced(stalkGeo, flat(pal.trunk), plantPts, pt => ground(pt) + 2.7 * pt.s, 0.7);
+    makeInstanced(stalkGeo, flat(pal.trunk), plantPts, pt => ground(pt) + 2.7 * pt.s, 0.7,
+      null, pt => ground(pt) + 5.4 * pt.s); // solid, but nothing to stand on
     const leafGeo = makeFanLeaf();
     const leafMats = [];
     for (const pt of plantPts) {
@@ -369,7 +376,8 @@ function buildFlora(cfg) {
     // fat toadstools — a stalk and a hemisphere cap read as a mushroom on their
     // own, and the spots are what make it unmistakable at a distance
     const capPts = scatter(34, 9, 46, 5.2);
-    makeInstanced(new THREE.CylinderGeometry(0.3, 0.46, 3.0, 7), flat(pal.trunk), capPts, pt => ground(pt) + 1.5 * pt.s, 0.6);
+    makeInstanced(new THREE.CylinderGeometry(0.3, 0.46, 3.0, 7), flat(pal.trunk), capPts, pt => ground(pt) + 1.5 * pt.s, 0.6,
+      null, pt => ground(pt) + 4.0 * pt.s); // stops blocking once you're up on the cap
     const capGeo = new THREE.SphereGeometry(1.55, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     capGeo.scale(1, 0.72, 1);
     makeInstanced(capGeo, flat(pal.pine), capPts, pt => ground(pt) + 2.9 * pt.s, 0,
@@ -447,7 +455,7 @@ function buildBeacon(cfg) {
     const crown2 = new THREE.IcosahedronGeometry(1.2, 0);
     add(crown2, hot, x + 0.9, y + 1.9, z - 0.5);
   }
-  colliders.push({ x, z, r: 0.8 });
+  colliders.push({ x, z, r: 0.8, blockTop: y + (cfg.flora === "cannabis" ? 6.3 : cfg.flora === "mushroom" ? 3.4 : 3.0) });
 }
 
 // ---------- the ship ----------
@@ -1475,7 +1483,7 @@ function step(dt) {
     // push-out is off entirely, so you can jump straight at a rock and come
     // down on top of it. Without this you get shoved sideways all the way up
     // and have to arc onto it precisely, which is what felt clunky.
-    if (c.top !== undefined && (feetY > c.top - CFG.ledge || vy > 0)) continue;
+    if (c.blockTop !== undefined && (feetY > c.blockTop - CFG.ledge || (c.top !== undefined && vy > 0))) continue;
     const dx = px - c.x, dz = pz - c.z, d2 = dx * dx + dz * dz, rr = c.r + 0.5;
     if (d2 < rr * rr && d2 > 1e-6) {
       const d = Math.sqrt(d2);

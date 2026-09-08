@@ -109,7 +109,13 @@ crowns, toadstool caps.
 
 Two rules make it work, and both matter:
 
-- The push-out is **skipped** once the hero's feet clear `top` — and also
+- Every solid thing carries a `blockTop` — how tall it actually is. A collider
+  only blocks you while you are **below** it. Miss this and a stalk keeps
+  shoving you sideways while you stand on the cap four units above it, which
+  reads as an invisible pillar through the middle of the platform. `top`
+  (landable) implies `blockTop`; things you cannot stand on, like a toadstool
+  stalk or a cannabis stem, declare it via `blockFn`.
+- The push-out is **skipped** once the hero's feet clear `blockTop` — and also
   whenever they are still rising (`vy > 0`). The second half matters more: it
   lets you jump straight at a rock and come down on top of it, instead of being
   shoved sideways the whole way up and having to arc on precisely.
