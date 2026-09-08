@@ -4,7 +4,7 @@
 // day triggers a character dance, by night a comet-and-fireworks sky show.
 import * as THREE from "../vendor/three.module.js";
 import { STR } from "../strings.js";
-import { PAL, SKY_KEYS, FOG_NEAR, FOG_FAR, GUMMY_FLAVORS, GUMMY_COLORS, DROPS_BRAND } from "./style.js";
+import { PAL, SKY_KEYS, FOG_NEAR, FOG_FAR, GUMMY_FLAVORS, GUMMY_COLORS, DROPS_BRAND, PLANETS } from "./style.js";
 import { buildCharacter, CHAR_IDS, MUSIC_STYLE } from "./characters.js";
 import { makeMusic } from "./music.js";
 
@@ -139,14 +139,34 @@ const LOGO_DIST = 200, LOGO_H = 40;
   });
 }
 
-// ---------- terrain ----------
-{
+// ---------- planets ----------
+// Everything below the sky is rebuilt when the planet changes, so the terrain,
+// water and flora all live in one disposable group rather than being created
+// inline at boot. `world` is emptied and refilled; nothing else holds a
+// reference to what's inside it.
+let planet = 0;
+const P = () => PLANETS[planet];
+const world = new THREE.Group();
+scene.add(world);
+const WATER_Y = -0.35; // sea level — also where a leap off the island splashes down
+
+function clearWorld() {
+  for (const o of [...world.children]) {
+    world.remove(o);
+    o.geometry?.dispose();
+    if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+    else o.material?.dispose();
+  }
+  colliders.length = 0;
+}
+
+function buildTerrain(pal) {
   const geo = new THREE.PlaneGeometry(150, 150, 110, 110);
   geo.rotateX(-Math.PI / 2);
   const p = geo.attributes.position;
   const colors = new Float32Array(p.count * 3);
-  const cGrass = new THREE.Color(PAL.grass), cGrassD = new THREE.Color(PAL.grassDark);
-  const cSand = new THREE.Color(PAL.sand), cWet = new THREE.Color(PAL.sandWet), cSea = new THREE.Color(PAL.seafloor);
+  const cGrass = new THREE.Color(pal.grass), cGrassD = new THREE.Color(pal.grassDark);
+  const cSand = new THREE.Color(pal.sand), cWet = new THREE.Color(pal.sandWet), cSea = new THREE.Color(pal.seafloor);
   const tmp = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i);
@@ -164,23 +184,54 @@ const LOGO_DIST = 200, LOGO_H = 40;
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 });
   const terrain = new THREE.Mesh(geo, mat);
   terrain.receiveShadow = true;
-  scene.add(terrain);
+  world.add(terrain);
 }
 
-// water
-const WATER_Y = -0.35; // sea level — also where a leap off the island splashes down
-{
+function buildWater(cfg) {
   const geo = new THREE.CircleGeometry(320, 48);
   geo.rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: PAL.water, roughness: 0.3, metalness: 0.08, emissive: 0x0d3a42, emissiveIntensity: 0.5 });
+  const mat = new THREE.MeshStandardMaterial({ color: cfg.pal.water, roughness: 0.3, metalness: 0.08,
+    emissive: cfg.waterEmissive, emissiveIntensity: 0.5 });
   const water = new THREE.Mesh(geo, mat);
   water.position.y = WATER_Y;
-  scene.add(water);
+  world.add(water);
 }
 
 // ---------- vegetation (instanced — one draw call per swarm, §7.5) ----------
 const colliders = []; // {x,z,r}
-{
+
+// A cannabis fan leaf, built as flat geometry rather than stacked primitives:
+// the plant is only recognisable by the silhouette of that seven-lobed blade,
+// and no arrangement of cones gets there. Leaflets fan from a shared petiole
+// with the middle one longest, and the whole blade droops as it extends so a
+// single Y rotation is all an instance needs to sit right on the stalk.
+function makeFanLeaf() {
+  const LOBES = 7, verts = [];
+  const half = (LOBES - 1) / 2;
+  for (let i = 0; i < LOBES; i++) {
+    const k = (i - half) / half;                 // -1..1 across the fan
+    const ang = k * 1.25;                        // splay
+    const len = 1 - Math.abs(k) * 0.55;          // middle leaflet is longest
+    const wide = 0.13 * len;
+    const droop = -0.28 * len * len;             // tips sag
+    const dx = Math.cos(ang), dz = Math.sin(ang);
+    const px = dx * len, pz = dz * len;          // tip
+    const sx = dx * len * 0.38, sz = dz * len * 0.38, sy = droop * 0.14;
+    // shoulders sit either side of the leaflet's own axis
+    const nx = -dz * wide, nz = dx * wide;
+    verts.push(
+      0, 0, 0, sx + nx, sy, sz + nz, px, droop, pz,
+      0, 0, 0, px, droop, pz, sx - nx, sy, sz - nz,
+    );
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+function buildFlora(cfg) {
+  const pal = cfg.pal;
   const rng = mulberry32(777); // static layout — players learn the island
   const dummy = new THREE.Object3D();
   function scatter(count, rMin, rMax, minGap) {
@@ -194,32 +245,85 @@ const colliders = []; // {x,z,r}
     }
     return pts;
   }
-  const pinePts = scatter(52, 8, 47, 3.2), leafPts = scatter(34, 8, 46, 3.4), rockPts = scatter(42, 6, 52, 2.6);
+  const flat = (c, rough = 0.9) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: rough, metalness: 0 });
+  // only the fan leaves are flat planes that must survive being seen edge-on
+  // from behind; everything else keeps backface culling
+  const flatTwoSided = (c, rough = 0.9) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: rough, metalness: 0, side: THREE.DoubleSide });
+  const ground = pt => terrainH(pt.x, pt.z) - 0.08;
 
-  function makeInstanced(geo, mat, pts, yFn, collideR) {
-    const m = new THREE.InstancedMesh(geo, mat, pts.length);
+  // place pre-built transforms (leaves need per-instance rotation, not just yaw)
+  function makeInstancedRaw(geo, mat, mats) {
+    const m = new THREE.InstancedMesh(geo, mat, mats.length);
     m.castShadow = true;
-    pts.forEach((pt, i) => {
+    mats.forEach((mx, i) => m.setMatrixAt(i, mx));
+    world.add(m);
+    return m;
+  }
+  function makeInstanced(geo, mat, pts, yFn, collideR) {
+    const mats = pts.map(pt => {
       dummy.position.set(pt.x, yFn(pt), pt.z);
       dummy.rotation.set(0, pt.rot, 0);
       dummy.scale.setScalar(pt.s);
       dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix);
       if (collideR) colliders.push({ x: pt.x, z: pt.z, r: collideR * pt.s });
+      return dummy.matrix.clone();
     });
-    scene.add(m);
-    return m;
+    return makeInstancedRaw(geo, mat, mats);
   }
-  const flat = (c, rough = 0.9) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: rough, metalness: 0 });
-  const ground = pt => terrainH(pt.x, pt.z) - 0.08;
-  makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(PAL.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75);
-  makeInstanced(new THREE.CylinderGeometry(0.16, 0.24, 1.0, 6), flat(PAL.trunk), pinePts, pt => ground(pt) + 0.45 * pt.s, 0);
-  const leafGeo = new THREE.IcosahedronGeometry(1.5, 0); leafGeo.scale(1, 0.85, 1);
-  makeInstanced(leafGeo, flat(PAL.leaf), leafPts, pt => ground(pt) + 1.95 * pt.s, 0.75);
-  makeInstanced(new THREE.CylinderGeometry(0.18, 0.26, 1.1, 6), flat(PAL.trunk), leafPts, pt => ground(pt) + 0.5 * pt.s, 0);
+  const rockPts = scatter(42, 6, 52, 2.6);
+
+  if (cfg.flora === "cannabis") {
+    // giant plants — far taller than the isle's pines, and spaced wider so
+    // they read as landmarks you walk between rather than a forest
+    const plantPts = scatter(30, 9, 46, 6.5);
+    const stalkGeo = new THREE.CylinderGeometry(0.12, 0.28, 5.4, 6);
+    makeInstanced(stalkGeo, flat(pal.trunk), plantPts, pt => ground(pt) + 2.7 * pt.s, 0.7);
+    const leafGeo = makeFanLeaf();
+    const leafMats = [];
+    for (const pt of plantPts) {
+      const base = ground(pt);
+      const tiers = 6;
+      for (let t = 0; t < tiers; t++) {
+        const up = 0.16 + (t / (tiers - 1)) * 0.76;      // fraction of stalk height
+        const perTier = t < tiers - 1 ? 5 : 3;
+        for (let i = 0; i < perTier; i++) {
+          const a = pt.rot + (i / perTier) * Math.PI * 2 + t * 0.8;
+          const reach = (2.9 - up * 1.4) * pt.s;          // lower fans are broader
+          dummy.position.set(pt.x, base + up * 5.4 * pt.s, pt.z);
+          dummy.rotation.set(0, -a, 0);
+          dummy.scale.setScalar(reach);
+          dummy.updateMatrix();
+          leafMats.push(dummy.matrix.clone());
+        }
+      }
+    }
+    makeInstancedRaw(leafGeo, flatTwoSided(pal.leaf, 0.85), leafMats);
+    // a pale cola topping each plant
+    const colaGeo = new THREE.IcosahedronGeometry(0.42, 0); colaGeo.scale(0.8, 1.7, 0.8);
+    makeInstanced(colaGeo, flat(pal.pine, 0.8), plantPts, pt => ground(pt) + 5.5 * pt.s, 0);
+  } else {
+    const pinePts = scatter(52, 8, 47, 3.2), leafPts = scatter(34, 8, 46, 3.4);
+    makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(pal.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75);
+    makeInstanced(new THREE.CylinderGeometry(0.16, 0.24, 1.0, 6), flat(pal.trunk), pinePts, pt => ground(pt) + 0.45 * pt.s, 0);
+    const leafGeo = new THREE.IcosahedronGeometry(1.5, 0); leafGeo.scale(1, 0.85, 1);
+    makeInstanced(leafGeo, flat(pal.leaf), leafPts, pt => ground(pt) + 1.95 * pt.s, 0.75);
+    makeInstanced(new THREE.CylinderGeometry(0.18, 0.26, 1.1, 6), flat(pal.trunk), leafPts, pt => ground(pt) + 0.5 * pt.s, 0);
+  }
   const rockGeo = new THREE.IcosahedronGeometry(0.9, 0); rockGeo.scale(1.15, 0.75, 1);
-  makeInstanced(rockGeo, flat(PAL.rock, 0.98), rockPts, pt => ground(pt) + 0.25 * pt.s, 0.95);
+  makeInstanced(rockGeo, flat(pal.rock, 0.98), rockPts, pt => ground(pt) + 0.25 * pt.s, 0.95);
 }
+
+function buildWorld(idx) {
+  planet = idx;
+  const cfg = PLANETS[idx];
+  clearWorld();
+  buildTerrain(cfg.pal);
+  buildWater(cfg);
+  buildFlora(cfg);
+}
+// ?planet=1 jumps straight to the second world for QA, ahead of the in-game
+// route there existing
+buildWorld(Math.min(PLANETS.length - 1, Math.max(0, +(Q.get("planet") || 0) | 0)));
 
 // ---------- gummy nodes ----------
 const nodePts = [];   // 30 spawn points (per-run seed)
@@ -952,8 +1056,9 @@ const skyCol = new THREE.Color(), sunCol = new THREE.Color(), tmpA = new THREE.C
 let nightFactor = 0;
 function updateSky(phase) {
   let i = 0;
-  while (i < SKY_KEYS.length - 2 && SKY_KEYS[i + 1].p <= phase) i++;
-  const a = SKY_KEYS[i], b = SKY_KEYS[i + 1];
+  const KEYS = P().sky;
+  while (i < KEYS.length - 2 && KEYS[i + 1].p <= phase) i++;
+  const a = KEYS[i], b = KEYS[i + 1];
   const f = Math.min(1, Math.max(0, (phase - a.p) / (b.p - a.p)));
   tmpA.setHex(a.sky); tmpB.setHex(b.sky); skyCol.copy(tmpA).lerp(tmpB, f);
   tmpA.setHex(a.sun); tmpB.setHex(b.sun); sunCol.copy(tmpA).lerp(tmpB, f);
@@ -1056,11 +1161,11 @@ function step(dt) {
       sinkT -= dt; py -= CFG.fallSink * dt; // settle under the surface, out of sight
       if (sinkT <= 0) { gameOver(true, STR.leaped); return; }
     } else {
-      vy -= CFG.fallGrav * dt; py += vy * dt;
+      vy -= CFG.fallGrav * P().gravity * dt; py += vy * dt;
       if (py <= WATER_Y) { py = WATER_Y; vy = 0; sinkT = CFG.sinkLen; spawnSplash(px, pz); }
     }
   } else if (!grounded) {
-    jumpY += vy * dt; vy -= CFG.gravity * dt;
+    jumpY += vy * dt; vy -= CFG.gravity * P().gravity * dt; // low-gravity worlds hang longer
     if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; jumpsLeft = CFG.jumps; }
   }
 
@@ -1445,6 +1550,12 @@ if (DEV || SMOKE) {
         opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor,
         simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state,
         jumpY, vy, grounded, jumpsLeft, falling, sinkT, pr: Math.hypot(px, pz) };
+    },
+    // rebuild the world in place — the mechanic the travel route will use
+    planet: (i = (planet + 1) % PLANETS.length) => {
+      buildWorld(i);
+      layoutNodes(BASE_SEED + runCount - 1); // colliders changed, so nodes must re-place
+      return { planet: PLANETS[i].id, gravity: PLANETS[i].gravity, colliders: colliders.length };
     },
     magnet: () => { // teleport onto the nearest active gummy (capture test)
       let bi = -1, bd = 1e9;

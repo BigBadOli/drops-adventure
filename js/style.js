@@ -60,6 +60,51 @@ export const SKY_KEYS = [
 export const FOG_NEAR = 75;
 export const FOG_FAR = 230;
 
+// Planet 2 — a hazy ochre world with an indigo sea. Deliberately warm and dusty
+// where the isle is cool and green, so the switch reads instantly even in a
+// screenshot; the cannabis canopy then pops green against the ochre ground.
+export const SKY_KEYS_HAZE = [
+  { p: 0.00, sky: 0xf0b7a0, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.0 }, // dawn
+  { p: 0.08, sky: 0xd9a8c8, sun: 0xffe0cc, sunI: 1.75, hemi: 0.52, stars: 0.0 },
+  { p: 0.42, sky: 0xc9a2d8, sun: 0xfff0e0, sunI: 1.85, hemi: 0.52, stars: 0.0 }, // lilac noon
+  { p: 0.52, sky: 0xe0857f, sun: 0xff8a5c, sunI: 0.9, hemi: 0.3, stars: 0.06 },
+  { p: 0.60, sky: 0x3b2a55, sun: 0x9c86d8, sunI: 0.2, hemi: 0.13, stars: 0.95 },
+  { p: 0.85, sky: 0x261c3d, sun: 0x9c86d8, sunI: 0.18, hemi: 0.11, stars: 1.0 }, // deep night
+  { p: 0.94, sky: 0x6b4a7a, sun: 0xd8a8c8, sunI: 0.33, hemi: 0.19, stars: 0.4 },
+  { p: 1.00, sky: 0xf0b7a0, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.0 },
+];
+
+// Each planet is a palette, a sky, a gravity scale and a flora style. The world
+// is fully procedural, so a new planet is data — there are no assets to author.
+export const PLANETS = [
+  {
+    id: "isle",
+    name: "Gummy Isle",
+    pal: PAL,
+    sky: SKY_KEYS,
+    gravity: 1,
+    flora: "temperate",
+    waterEmissive: 0x0d3a42,
+  },
+  {
+    id: "haze",
+    name: "Hazy Acres",
+    pal: {
+      grass: 0x9a8b52, grassDark: 0x77693a,
+      sand: 0xd9bd8e, sandWet: 0xb69874,
+      seafloor: 0x4a3f5e, water: 0x3b2f6b,
+      pine: 0x5f9e3f, pineDark: 0x4c7f33, leaf: 0x6cb04a,
+      trunk: 0x6f8f4a, rock: 0x9a8f9e,
+      heroCream: PAL.heroCream, heroCoral: PAL.heroCoral, heroDark: PAL.heroDark,
+      visor: PAL.visor, crystal: PAL.crystal, crystalBase: PAL.crystalBase,
+    },
+    sky: SKY_KEYS_HAZE,
+    gravity: 0.38, // a double jump clears roughly two and a half heroes here
+    flora: "cannabis",
+    waterEmissive: 0x241a4a,
+  },
+];
+
 // The 11 Drops flavors — names, effects, and pack colors from the product line.
 // Every color spawns on the island; capturing one toasts its name + effect.
 export const GUMMY_FLAVORS = [
