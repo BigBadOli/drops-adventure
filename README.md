@@ -31,13 +31,24 @@ npm run dev            # http://localhost:8787
   - **Daytime capture** → your hero locks into a signature boogie with confetti.
   - **Night capture** → dazzling sky show: flaring stars, comets, colorful
     firework explosions.
-- **Travel between planets.** One plant on each world has red leaves — walk up
-  to it and a prompt appears (**E**, a controller face button, or tap it). A
-  saucer drops out of the sky; walk into it and press again to board, and it
-  flies you to the other planet. **Hazy Acres** runs at 0.38 gravity with giant
-  cannabis flora: a double jump clears about two and a half heroes there, with
-  three seconds of hang time. Each planet has its own red plant, so the trip
-  works both ways. Dying anywhere returns you to the isle for the next run.
+- **Travel between four planets.** One plant on each world has red leaves — walk
+  up to it and a prompt appears (**E**, a controller face button, or tap it). A
+  saucer drops out of the sky; walk into it and press again to board. Each trip
+  takes you on to the next world, so the four form a circuit that eventually
+  loops home. Every world has its own gravity, and it changes how it plays:
+
+  | World | Gravity | Single-jump apex | Flora |
+  |---|---|---|---|
+  | Gummy Isle | 1.0 | 0.92 | pines and leafy trees |
+  | Hazy Acres | 0.38 | 2.36 | giant cannabis |
+  | Ring Reach | 0.25 | 3.57 | giant toadstools |
+  | Ember Deep | 1.55 | 0.61 | crystal spires |
+
+  Heroes are ~1.7 units tall, so Ring Reach barely holds you down and Ember Deep
+  feels leaden. Hazy Acres, Ring Reach and Ember Deep hang neighbouring planets
+  in the sky and keep their stars lit through the day; Ring Reach has its own
+  ring system, seen from the surface as a band arcing overhead. Dying anywhere
+  returns you to the isle for the next run.
 - **Leap off the island to end a run.** The shoreline blocks you on foot, but
   jump as you reach it and you sail clean over — a committed arc out to sea
   with no way to steer back, ending in a splashdown. Your score banks exactly

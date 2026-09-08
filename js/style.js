@@ -74,11 +74,38 @@ export const SKY_KEYS_HAZE = [
   { p: 0.60, sky: 0x2b1f44, sun: 0x9c86d8, sunI: 0.2, hemi: 0.13, stars: 1.0 },
   { p: 0.85, sky: 0x171128, sun: 0x9c86d8, sunI: 0.18, hemi: 0.11, stars: 1.0 }, // deep night
   { p: 0.94, sky: 0x4d3a63, sun: 0xd8a8c8, sunI: 0.33, hemi: 0.19, stars: 0.7 },
-  { p: 1.00, sky: 0xa87289, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.30 },
+  { p: 1.00, sky: 0x6b4560, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.45 },
 ];
 
 // Each planet is a palette, a sky, a gravity scale and a flora style. The world
 // is fully procedural, so a new planet is data — there are no assets to author.
+// Ring Reach — a sugar-bright world: mint ground, a magenta sea, and its own
+// ring arcing overhead. Sky stays saturated rather than dark; the ring does the
+// heavy lifting here, not gloom.
+export const SKY_KEYS_RING = [
+  { p: 0.00, sky: 0x7fd9d0, sun: 0xffd9c0, sunI: 1.15, hemi: 0.42, stars: 0.20 }, // dawn
+  { p: 0.08, sky: 0x59c8d8, sun: 0xfff0e6, sunI: 1.95, hemi: 0.58, stars: 0.22 },
+  { p: 0.42, sky: 0x3fb9d6, sun: 0xfff6ee, sunI: 2.0, hemi: 0.58, stars: 0.25 }, // teal noon
+  { p: 0.52, sky: 0xd85c9e, sun: 0xff7fb0, sunI: 1.0, hemi: 0.34, stars: 0.35 }, // magenta dusk
+  { p: 0.60, sky: 0x3a1c4e, sun: 0xc07fd8, sunI: 0.24, hemi: 0.16, stars: 1.0 },
+  { p: 0.85, sky: 0x22102f, sun: 0xc07fd8, sunI: 0.2, hemi: 0.13, stars: 1.0 },
+  { p: 0.94, sky: 0x7a3a86, sun: 0xf0a8d8, sunI: 0.38, hemi: 0.22, stars: 0.55 },
+  { p: 1.00, sky: 0x7fd9d0, sun: 0xffd9c0, sunI: 1.15, hemi: 0.42, stars: 0.20 },
+];
+
+// Ember Deep — a heavy, close-to-the-furnace world. Near-black sky all day, lit
+// ground, crystal spires. Gravity here makes the isle feel springy afterwards.
+export const SKY_KEYS_EMBER = [
+  { p: 0.00, sky: 0x5c1e22, sun: 0xffb070, sunI: 1.1, hemi: 0.34, stars: 0.55 },
+  { p: 0.08, sky: 0x3d1418, sun: 0xffc890, sunI: 1.7, hemi: 0.46, stars: 0.65 },
+  { p: 0.42, sky: 0x2e0f14, sun: 0xffd6a8, sunI: 1.8, hemi: 0.46, stars: 0.75 }, // ember noon
+  { p: 0.52, sky: 0x6b2415, sun: 0xff7a3c, sunI: 0.95, hemi: 0.3, stars: 0.8 },
+  { p: 0.60, sky: 0x1a0a10, sun: 0xd88a6a, sunI: 0.22, hemi: 0.14, stars: 1.0 },
+  { p: 0.85, sky: 0x0d050a, sun: 0xd88a6a, sunI: 0.2, hemi: 0.12, stars: 1.0 },
+  { p: 0.94, sky: 0x3a1220, sun: 0xe0907a, sunI: 0.34, hemi: 0.2, stars: 0.85 },
+  { p: 1.00, sky: 0x5c1e22, sun: 0xffb070, sunI: 1.1, hemi: 0.34, stars: 0.55 },
+];
+
 export const PLANETS = [
   {
     id: "isle",
@@ -120,6 +147,53 @@ export const PLANETS = [
       { r: 9, dist: 300, az: 4.55, el: 0.82, color: 0xdad4c6, emissive: 0x2b2721 },
       // and a small far one, mostly a detail you notice on the second visit
       { r: 5.5, dist: 340, az: 5.6, el: 0.33, color: 0xb98f8f, emissive: 0x2a1a1a },
+    ],
+  },
+  {
+    id: "ring",
+    name: "Ring Reach",
+    pal: {
+      grass: 0x4fd0b0, grassDark: 0x37a88f,
+      sand: 0xf2e3a8, sandWet: 0xd4c184,
+      seafloor: 0x8a2f63, water: 0xc7407f,
+      pine: 0xff5fb0, pineDark: 0xd8408f, leaf: 0xff8ac8,
+      trunk: 0xf5e6d0, rock: 0x8fd8e0,
+      heroCream: PAL.heroCream, heroCoral: PAL.heroCoral, heroDark: PAL.heroDark,
+      visor: PAL.visor, crystal: PAL.crystal, crystalBase: PAL.crystalBase,
+    },
+    sky: SKY_KEYS_RING,
+    gravity: 0.25, // the floatiest of the four
+    flora: "mushroom",
+    waterEmissive: 0x5c1030,
+    beacon: { a: 4.1, r: 21, leaf: 0xfff04d },
+    // this world's own ring system, seen from the surface as a band overhead
+    arc: { radius: 330, tube: 34, color: 0xf5e3b0, yaw: 0.7, tilt: 0.34 },
+    bodies: [
+      { r: 13, dist: 330, az: 0.4, el: 0.62, color: 0xffd98a, emissive: 0x3a2a10 },
+      { r: 26, dist: 400, az: 3.5, el: 0.24, color: 0xa85fd0, emissive: 0x2a1440 },
+    ],
+  },
+  {
+    id: "ember",
+    name: "Ember Deep",
+    pal: {
+      grass: 0x7a2f3a, grassDark: 0x59202a,
+      sand: 0xa8603a, sandWet: 0x82462c,
+      seafloor: 0x1a0a12, water: 0x2e1220,
+      pine: 0xffb347, pineDark: 0xe08a2a, leaf: 0xffd98a,
+      trunk: 0x4a3038, rock: 0x4a3038,
+      heroCream: PAL.heroCream, heroCoral: PAL.heroCoral, heroDark: PAL.heroDark,
+      visor: PAL.visor, crystal: PAL.crystal, crystalBase: PAL.crystalBase,
+    },
+    sky: SKY_KEYS_EMBER,
+    gravity: 1.55, // heavy — jumps go leaden, and the isle feels springy after
+    flora: "crystal",
+    waterEmissive: 0x501a10,
+    beacon: { a: 5.6, r: 21, leaf: 0x4fe8ff },
+    bodies: [
+      // an enormous close sun-lit body — you are deep in someone's gravity well
+      { r: 132, dist: 440, az: 2.2, el: 0.30, color: 0x8c2f22, emissive: 0x2a0d0a },
+      { r: 11, dist: 320, az: 5.0, el: 0.66, color: 0xe0a070, emissive: 0x3a2015 },
     ],
   },
 ];

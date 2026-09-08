@@ -190,6 +190,21 @@ function buildSkyBodies(cfg) {
     g.position.set(Math.cos(b.az) * ce * b.dist, Math.sin(b.el) * b.dist, Math.sin(b.az) * ce * b.dist);
     skyBodies.add(g);
   }
+  // A world with its own rings sees them from underneath as a band crossing the
+  // sky. This has to be a torus, not a flat annulus: the band is centred on the
+  // camera, so a flat ring would be seen exactly edge-on and render as a
+  // hairline. The tube gives it real width from the inside. Only the upper arc
+  // is built — the rest would sit below the horizon.
+  if (cfg.arc) {
+    const a = cfg.arc;
+    const m = new THREE.MeshStandardMaterial({ color: a.color, roughness: 1, metalness: 0,
+      fog: false, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
+    m.emissive.setHex(a.color); m.emissiveIntensity = 0.4;
+    const geo = new THREE.TorusGeometry(a.radius, a.tube, 6, 120, Math.PI * 1.45);
+    const arc = new THREE.Mesh(geo, m);
+    arc.rotation.set(a.tilt, a.yaw, 0);
+    skyBodies.add(arc);
+  }
 }
 
 function buildTerrain(pal) {
@@ -333,6 +348,49 @@ function buildFlora(cfg) {
     // a pale cola topping each plant
     const colaGeo = new THREE.IcosahedronGeometry(0.42, 0); colaGeo.scale(0.8, 1.7, 0.8);
     makeInstanced(colaGeo, flat(pal.pine, 0.8), plantPts, pt => ground(pt) + 5.5 * pt.s, 0);
+  } else if (cfg.flora === "mushroom") {
+    // fat toadstools — a stalk and a hemisphere cap read as a mushroom on their
+    // own, and the spots are what make it unmistakable at a distance
+    const capPts = scatter(34, 9, 46, 5.2);
+    makeInstanced(new THREE.CylinderGeometry(0.3, 0.46, 3.0, 7), flat(pal.trunk), capPts, pt => ground(pt) + 1.5 * pt.s, 0.6);
+    const capGeo = new THREE.SphereGeometry(1.55, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    capGeo.scale(1, 0.72, 1);
+    makeInstanced(capGeo, flat(pal.pine), capPts, pt => ground(pt) + 2.9 * pt.s, 0);
+    const spotGeo = new THREE.SphereGeometry(0.2, 7, 5); spotGeo.scale(1, 0.42, 1);
+    const spotMats = [];
+    for (const pt of capPts) {
+      for (let i = 0; i < 5; i++) {
+        const a = pt.rot + (i / 5) * Math.PI * 2, lean = 0.45 + (i % 2) * 0.32;
+        dummy.position.set(pt.x + Math.cos(a) * 1.5 * lean * pt.s,
+          ground(pt) + (2.9 + Math.sqrt(Math.max(0, 1 - lean * lean)) * 1.1) * pt.s,
+          pt.z + Math.sin(a) * 1.5 * lean * pt.s);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(pt.s * (0.8 + (i % 3) * 0.16));
+        dummy.updateMatrix();
+        spotMats.push(dummy.matrix.clone());
+      }
+    }
+    makeInstancedRaw(spotGeo, flat(pal.trunk, 0.8), spotMats); // cream, not cap-pink
+  } else if (cfg.flora === "crystal") {
+    // clusters of leaning shards; they glow faintly so the near-black sky of
+    // Ember Deep still has something picking out the ground
+    const shardPts = scatter(44, 8, 47, 4.0);
+    const shardGeo = new THREE.OctahedronGeometry(1, 0); shardGeo.scale(0.34, 2.5, 0.34);
+    const glow = flat(pal.pine, 0.5); glow.emissive.setHex(pal.pine); glow.emissiveIntensity = 0.4;
+    const shardMats = [];
+    for (const pt of shardPts) {
+      for (let i = 0; i < 4; i++) {
+        const a = pt.rot + (i / 4) * Math.PI * 2, off = 0.5 + (i % 2) * 0.45;
+        const h = (1.1 + (i % 3) * 0.5) * pt.s;
+        dummy.position.set(pt.x + Math.cos(a) * off, ground(pt) + h * 0.9, pt.z + Math.sin(a) * off);
+        dummy.rotation.set(Math.cos(a) * 0.2, a, Math.sin(a) * 0.2);
+        dummy.scale.set(pt.s, h, pt.s);
+        dummy.updateMatrix();
+        shardMats.push(dummy.matrix.clone());
+      }
+      colliders.push({ x: pt.x, z: pt.z, r: 0.9 });
+    }
+    makeInstancedRaw(shardGeo, glow, shardMats);
   } else {
     const pinePts = scatter(52, 8, 47, 3.2), leafPts = scatter(34, 8, 46, 3.4);
     makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(pal.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75);
@@ -376,6 +434,18 @@ function buildBeacon(cfg) {
     }
     const cola = new THREE.IcosahedronGeometry(0.46, 0); cola.scale(0.8, 1.7, 0.8);
     add(cola, hot, x, y + 6.3, z);
+  } else if (cfg.flora === "mushroom") {
+    add(new THREE.CylinderGeometry(0.34, 0.5, 3.4, 7), bark, x, y + 1.7, z);
+    const cap = new THREE.SphereGeometry(1.9, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+    cap.scale(1, 0.72, 1);
+    add(cap, hot, x, y + 3.3, z);
+  } else if (cfg.flora === "crystal") {
+    const sh = new THREE.OctahedronGeometry(1, 0); sh.scale(0.4, 3.4, 0.4);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const m = add(sh, hot, x + Math.cos(a) * 0.6, y + 2.6 + (i % 2) * 0.7, z + Math.sin(a) * 0.6);
+      m.rotation.set(Math.cos(a) * 0.18, a, Math.sin(a) * 0.18);
+    }
   } else {
     add(new THREE.CylinderGeometry(0.22, 0.32, 1.5, 6), bark, x, y + 0.7, z);
     const crown = new THREE.IcosahedronGeometry(1.9, 0); crown.scale(1, 0.85, 1);
