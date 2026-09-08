@@ -98,12 +98,15 @@ scene.add(sun); scene.add(sun.target);
 const hemi = new THREE.HemisphereLight(0xbfe3ee, 0x6f9e54, 0.5);
 scene.add(hemi);
 
-// stars (night + sky-show flare)
+// stars (night + sky-show flare). Denser than the isle strictly needs, because
+// Hazy Acres keeps them lit through the day and a sparse field reads as a bug
+// rather than a thin atmosphere.
+const STAR_COUNT = 850;
 const starGeo = new THREE.BufferGeometry();
 {
   const rng = mulberry32(4242);
-  const pos = new Float32Array(400 * 3);
-  for (let i = 0; i < 400; i++) {
+  const pos = new Float32Array(STAR_COUNT * 3);
+  for (let i = 0; i < STAR_COUNT; i++) {
     const a = rng() * Math.PI * 2, e = 0.12 + rng() * 0.85, r = 210;
     pos[i * 3] = Math.cos(a) * Math.cos(e) * r;
     pos[i * 3 + 1] = Math.sin(e) * r;
@@ -150,14 +153,43 @@ const world = new THREE.Group();
 scene.add(world);
 const WATER_Y = -0.35; // sea level — also where a leap off the island splashes down
 
+function disposeTree(o) { // traverses, so nested groups release their GPU memory too
+  o.traverse(n => {
+    n.geometry?.dispose();
+    if (Array.isArray(n.material)) n.material.forEach(m => m.dispose());
+    else n.material?.dispose();
+  });
+}
 function clearWorld() {
-  for (const o of [...world.children]) {
-    world.remove(o);
-    o.geometry?.dispose();
-    if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
-    else o.material?.dispose();
-  }
+  for (const o of [...world.children]) { world.remove(o); disposeTree(o); }
   colliders.length = 0;
+}
+
+// Celestial neighbours. Kept out of `world` and re-centred on the camera every
+// frame, so they behave like a skybox: no parallax as the player walks, and no
+// fog, which would otherwise erase anything past FOG_FAR (230) long before
+// these get a chance to render.
+const skyBodies = new THREE.Group();
+scene.add(skyBodies);
+function buildSkyBodies(cfg) {
+  for (const o of [...skyBodies.children]) { skyBodies.remove(o); disposeTree(o); }
+  for (const b of cfg.bodies || []) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: b.color, flatShading: true, roughness: 1, metalness: 0, fog: false });
+    mat.emissive.setHex(b.emissive); mat.emissiveIntensity = 1; // keeps the night side off pure black
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(b.r, 18, 12), mat));
+    if (b.ring) {
+      const rm = new THREE.MeshStandardMaterial({ color: b.ring.color, roughness: 1, metalness: 0,
+        fog: false, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+      rm.emissive.setHex(b.ring.color); rm.emissiveIntensity = 0.3;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(b.r * b.ring.inner, b.r * b.ring.outer, 44), rm);
+      ring.rotation.set(Math.PI / 2 - b.ring.tilt, 0, 0.35);
+      g.add(ring);
+    }
+    const ce = Math.cos(b.el);
+    g.position.set(Math.cos(b.az) * ce * b.dist, Math.sin(b.el) * b.dist, Math.sin(b.az) * ce * b.dist);
+    skyBodies.add(g);
+  }
 }
 
 function buildTerrain(pal) {
@@ -398,10 +430,13 @@ function buildWorld(idx) {
   buildTerrain(cfg.pal);
   buildWater(cfg);
   buildFlora(cfg);
+  buildSkyBodies(cfg);
 }
-// ?planet=1 jumps straight to the second world for QA, ahead of the in-game
-// route there existing
-buildWorld(Math.min(PLANETS.length - 1, Math.max(0, +(Q.get("planet") || 0) | 0)));
+// Where every run begins. Normally the isle; ?planet=1 starts you on the second
+// world for QA, and resetRun() returns here rather than hard-coding planet 0,
+// so the override survives a restart.
+const HOME_PLANET = Math.min(PLANETS.length - 1, Math.max(0, +(Q.get("planet") || 0) | 0));
+buildWorld(HOME_PLANET);
 
 // ---------- gummy nodes ----------
 const nodePts = [];   // 30 spawn points (per-run seed)
@@ -1009,7 +1044,7 @@ function resetRun() {
   usePressed = false;
   ship.visible = false;
   if (rig) { rig.group.visible = true; rig.group.scale.setScalar(1); }
-  if (planet !== 0) buildWorld(0);
+  if (planet !== HOME_PLANET) buildWorld(HOME_PLANET);
   layoutNodes(BASE_SEED + runCount - 1);
   bar = CFG.barMax; score = 0; survived = START_T; simT = START_T; collected = 0;
   px = 0; pz = 0; py = terrainH(0, 0); vx = 0; vz = 0; vy = 0; jumpY = 0; grounded = true;
@@ -1638,6 +1673,7 @@ function present(realDt) {
   if (tmpV2.y < minY) tmpV2.y = minY;
   camera.position.lerp(tmpV2, Math.min(1, 14 * realDt));
   camera.lookAt(tmpV);
+  skyBodies.position.copy(camera.position); // ride along — no parallax on the sky
 }
 
 // ---------- HUD (throttled) ----------

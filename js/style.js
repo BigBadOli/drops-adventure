@@ -63,15 +63,18 @@ export const FOG_FAR = 230;
 // Planet 2 — a hazy ochre world with an indigo sea. Deliberately warm and dusty
 // where the isle is cool and green, so the switch reads instantly even in a
 // screenshot; the cannabis canopy then pops green against the ochre ground.
+// Thin atmosphere: the sky never goes bright, and the stars never fully go out,
+// so the daylight hours still read as standing on a rock in space. Ground light
+// (sunI/hemi) stays generous so the world itself is no darker to play in.
 export const SKY_KEYS_HAZE = [
-  { p: 0.00, sky: 0xf0b7a0, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.0 }, // dawn
-  { p: 0.08, sky: 0xd9a8c8, sun: 0xffe0cc, sunI: 1.75, hemi: 0.52, stars: 0.0 },
-  { p: 0.42, sky: 0xc9a2d8, sun: 0xfff0e0, sunI: 1.85, hemi: 0.52, stars: 0.0 }, // lilac noon
-  { p: 0.52, sky: 0xe0857f, sun: 0xff8a5c, sunI: 0.9, hemi: 0.3, stars: 0.06 },
-  { p: 0.60, sky: 0x3b2a55, sun: 0x9c86d8, sunI: 0.2, hemi: 0.13, stars: 0.95 },
-  { p: 0.85, sky: 0x261c3d, sun: 0x9c86d8, sunI: 0.18, hemi: 0.11, stars: 1.0 }, // deep night
-  { p: 0.94, sky: 0x6b4a7a, sun: 0xd8a8c8, sunI: 0.33, hemi: 0.19, stars: 0.4 },
-  { p: 1.00, sky: 0xf0b7a0, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.0 },
+  { p: 0.00, sky: 0x6b4560, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.45 }, // dawn
+  { p: 0.08, sky: 0x513c6b, sun: 0xffe0cc, sunI: 1.75, hemi: 0.52, stars: 0.55 },
+  { p: 0.42, sky: 0x433263, sun: 0xfff0e0, sunI: 1.85, hemi: 0.52, stars: 0.62 }, // violet "noon"
+  { p: 0.52, sky: 0x5a3757, sun: 0xff8a5c, sunI: 0.9, hemi: 0.3, stars: 0.7 },
+  { p: 0.60, sky: 0x2b1f44, sun: 0x9c86d8, sunI: 0.2, hemi: 0.13, stars: 1.0 },
+  { p: 0.85, sky: 0x171128, sun: 0x9c86d8, sunI: 0.18, hemi: 0.11, stars: 1.0 }, // deep night
+  { p: 0.94, sky: 0x4d3a63, sun: 0xd8a8c8, sunI: 0.33, hemi: 0.19, stars: 0.7 },
+  { p: 1.00, sky: 0xa87289, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.30 },
 ];
 
 // Each planet is a palette, a sky, a gravity scale and a flora style. The world
@@ -104,6 +107,20 @@ export const PLANETS = [
     flora: "cannabis",
     waterEmissive: 0x241a4a,
     beacon: { a: 2.45, r: 21, leaf: 0xe0447c },
+    // Neighbours in the sky. az/el are radians (el 0 = horizon), dist stays
+    // inside the 500 far plane, and they ride with the camera so they read as
+    // genuinely distant rather than sliding past as you walk.
+    bodies: [
+      // a banded giant sitting low, big enough to dominate one horizon
+      { r: 78, dist: 430, az: 1.05, el: 0.21, color: 0xc9834a, emissive: 0x40230e },
+      // ringed neighbour, mid-sky
+      { r: 21, dist: 370, az: 2.75, el: 0.55, color: 0x9db4d6, emissive: 0x18233c,
+        ring: { inner: 1.45, outer: 2.35, tilt: 0.42, color: 0xe0cfa8 } },
+      // a close pale moon, high up
+      { r: 9, dist: 300, az: 4.55, el: 0.82, color: 0xdad4c6, emissive: 0x2b2721 },
+      // and a small far one, mostly a detail you notice on the second visit
+      { r: 5.5, dist: 340, az: 5.6, el: 0.33, color: 0xb98f8f, emissive: 0x2a1a1a },
+    ],
   },
 ];
 
