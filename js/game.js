@@ -371,26 +371,6 @@ function buildFlora(cfg) {
       }
     }
     makeInstancedRaw(spotGeo, flat(pal.trunk, 0.8), spotMats); // cream, not cap-pink
-  } else if (cfg.flora === "crystal") {
-    // clusters of leaning shards; they glow faintly so the near-black sky of
-    // Ember Deep still has something picking out the ground
-    const shardPts = scatter(44, 8, 47, 4.0);
-    const shardGeo = new THREE.OctahedronGeometry(1, 0); shardGeo.scale(0.34, 2.5, 0.34);
-    const glow = flat(pal.pine, 0.5); glow.emissive.setHex(pal.pine); glow.emissiveIntensity = 0.4;
-    const shardMats = [];
-    for (const pt of shardPts) {
-      for (let i = 0; i < 4; i++) {
-        const a = pt.rot + (i / 4) * Math.PI * 2, off = 0.5 + (i % 2) * 0.45;
-        const h = (1.1 + (i % 3) * 0.5) * pt.s;
-        dummy.position.set(pt.x + Math.cos(a) * off, ground(pt) + h * 0.9, pt.z + Math.sin(a) * off);
-        dummy.rotation.set(Math.cos(a) * 0.2, a, Math.sin(a) * 0.2);
-        dummy.scale.set(pt.s, h, pt.s);
-        dummy.updateMatrix();
-        shardMats.push(dummy.matrix.clone());
-      }
-      colliders.push({ x: pt.x, z: pt.z, r: 0.9 });
-    }
-    makeInstancedRaw(shardGeo, glow, shardMats);
   } else {
     const pinePts = scatter(52, 8, 47, 3.2), leafPts = scatter(34, 8, 46, 3.4);
     makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(pal.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75);
@@ -439,13 +419,6 @@ function buildBeacon(cfg) {
     const cap = new THREE.SphereGeometry(1.9, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     cap.scale(1, 0.72, 1);
     add(cap, hot, x, y + 3.3, z);
-  } else if (cfg.flora === "crystal") {
-    const sh = new THREE.OctahedronGeometry(1, 0); sh.scale(0.4, 3.4, 0.4);
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      const m = add(sh, hot, x + Math.cos(a) * 0.6, y + 2.6 + (i % 2) * 0.7, z + Math.sin(a) * 0.6);
-      m.rotation.set(Math.cos(a) * 0.18, a, Math.sin(a) * 0.18);
-    }
   } else {
     add(new THREE.CylinderGeometry(0.22, 0.32, 1.5, 6), bark, x, y + 0.7, z);
     const crown = new THREE.IcosahedronGeometry(1.9, 0); crown.scale(1, 0.85, 1);

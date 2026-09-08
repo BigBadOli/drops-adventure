@@ -77,8 +77,6 @@ export const SKY_KEYS_HAZE = [
   { p: 1.00, sky: 0x6b4560, sun: 0xffcaa0, sunI: 1.05, hemi: 0.36, stars: 0.45 },
 ];
 
-// Each planet is a palette, a sky, a gravity scale and a flora style. The world
-// is fully procedural, so a new planet is data — there are no assets to author.
 // Ring Reach — a sugar-bright world: mint ground, a magenta sea, and its own
 // ring arcing overhead. Sky stays saturated rather than dark; the ring does the
 // heavy lifting here, not gloom.
@@ -93,19 +91,9 @@ export const SKY_KEYS_RING = [
   { p: 1.00, sky: 0x7fd9d0, sun: 0xffd9c0, sunI: 1.15, hemi: 0.42, stars: 0.20 },
 ];
 
-// Ember Deep — a heavy, close-to-the-furnace world. Near-black sky all day, lit
-// ground, crystal spires. Gravity here makes the isle feel springy afterwards.
-export const SKY_KEYS_EMBER = [
-  { p: 0.00, sky: 0x5c1e22, sun: 0xffb070, sunI: 1.1, hemi: 0.34, stars: 0.55 },
-  { p: 0.08, sky: 0x3d1418, sun: 0xffc890, sunI: 1.7, hemi: 0.46, stars: 0.65 },
-  { p: 0.42, sky: 0x2e0f14, sun: 0xffd6a8, sunI: 1.8, hemi: 0.46, stars: 0.75 }, // ember noon
-  { p: 0.52, sky: 0x6b2415, sun: 0xff7a3c, sunI: 0.95, hemi: 0.3, stars: 0.8 },
-  { p: 0.60, sky: 0x1a0a10, sun: 0xd88a6a, sunI: 0.22, hemi: 0.14, stars: 1.0 },
-  { p: 0.85, sky: 0x0d050a, sun: 0xd88a6a, sunI: 0.2, hemi: 0.12, stars: 1.0 },
-  { p: 0.94, sky: 0x3a1220, sun: 0xe0907a, sunI: 0.34, hemi: 0.2, stars: 0.85 },
-  { p: 1.00, sky: 0x5c1e22, sun: 0xffb070, sunI: 1.1, hemi: 0.34, stars: 0.55 },
-];
-
+// Each planet is a palette, a sky, a gravity scale, a flora style and whatever
+// hangs in its sky. The world is fully procedural, so a planet is data — there
+// are no assets to author.
 export const PLANETS = [
   {
     id: "isle",
@@ -138,15 +126,30 @@ export const PLANETS = [
     // inside the 500 far plane, and they ride with the camera so they read as
     // genuinely distant rather than sliding past as you walk.
     bodies: [
-      // a banded giant sitting low, big enough to dominate one horizon
+      // the banded giant that dominates one horizon
       { r: 78, dist: 430, az: 1.05, el: 0.21, color: 0xc9834a, emissive: 0x40230e },
+      // a second, cooler giant further round and further off
+      { r: 46, dist: 462, az: 4.35, el: 0.27, color: 0x6f7fb8, emissive: 0x171f38 },
       // ringed neighbour, mid-sky
       { r: 21, dist: 370, az: 2.75, el: 0.55, color: 0x9db4d6, emissive: 0x18233c,
         ring: { inner: 1.45, outer: 2.35, tilt: 0.42, color: 0xe0cfa8 } },
-      // a close pale moon, high up
-      { r: 9, dist: 300, az: 4.55, el: 0.82, color: 0xdad4c6, emissive: 0x2b2721 },
-      // and a small far one, mostly a detail you notice on the second visit
-      { r: 5.5, dist: 340, az: 5.6, el: 0.33, color: 0xb98f8f, emissive: 0x2a1a1a },
+      // a smaller ringed one, low on the far side and tipped almost edge-on
+      { r: 13, dist: 400, az: 5.35, el: 0.17, color: 0xd8a05f, emissive: 0x3a2410,
+        ring: { inner: 1.5, outer: 2.7, tilt: 1.05, color: 0xb8c8d8 } },
+      // an icy blue-green world
+      { r: 16, dist: 412, az: 3.55, el: 0.48, color: 0x7fd0c0, emissive: 0x14332e },
+      // deep violet, mid-distance
+      { r: 11, dist: 356, az: 2.05, el: 0.31, color: 0x8a6fc0, emissive: 0x1e1636 },
+      // close pale moon, high up
+      { r: 9, dist: 300, az: 4.55, el: 0.80, color: 0xdad4c6, emissive: 0x2b2721 },
+      // a pair of little moons sitting near each other
+      { r: 6, dist: 292, az: 0.35, el: 0.66, color: 0xc8b8a8, emissive: 0x2a2420 },
+      { r: 4, dist: 276, az: 0.54, el: 0.59, color: 0xa89888, emissive: 0x221c18 },
+      // a rusty one
+      { r: 5.5, dist: 340, az: 5.62, el: 0.34, color: 0xb98f8f, emissive: 0x2a1a1a },
+      // and a couple of far specks, mostly noticed on a second visit
+      { r: 3.2, dist: 332, az: 1.75, el: 0.70, color: 0xe0d8c8, emissive: 0x2a2620 },
+      { r: 3.8, dist: 362, az: 3.05, el: 0.13, color: 0xc0a070, emissive: 0x281f14 },
     ],
   },
   {
@@ -171,29 +174,6 @@ export const PLANETS = [
     bodies: [
       { r: 13, dist: 330, az: 0.4, el: 0.62, color: 0xffd98a, emissive: 0x3a2a10 },
       { r: 26, dist: 400, az: 3.5, el: 0.24, color: 0xa85fd0, emissive: 0x2a1440 },
-    ],
-  },
-  {
-    id: "ember",
-    name: "Ember Deep",
-    pal: {
-      grass: 0x7a2f3a, grassDark: 0x59202a,
-      sand: 0xa8603a, sandWet: 0x82462c,
-      seafloor: 0x1a0a12, water: 0x2e1220,
-      pine: 0xffb347, pineDark: 0xe08a2a, leaf: 0xffd98a,
-      trunk: 0x4a3038, rock: 0x4a3038,
-      heroCream: PAL.heroCream, heroCoral: PAL.heroCoral, heroDark: PAL.heroDark,
-      visor: PAL.visor, crystal: PAL.crystal, crystalBase: PAL.crystalBase,
-    },
-    sky: SKY_KEYS_EMBER,
-    gravity: 1.55, // heavy — jumps go leaden, and the isle feels springy after
-    flora: "crystal",
-    waterEmissive: 0x501a10,
-    beacon: { a: 5.6, r: 21, leaf: 0x4fe8ff },
-    bodies: [
-      // an enormous close sun-lit body — you are deep in someone's gravity well
-      { r: 132, dist: 440, az: 2.2, el: 0.30, color: 0x8c2f22, emissive: 0x2a0d0a },
-      { r: 11, dist: 320, az: 5.0, el: 0.66, color: 0xe0a070, emissive: 0x3a2015 },
     ],
   },
 ];
