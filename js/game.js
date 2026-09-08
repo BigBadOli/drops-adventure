@@ -311,6 +311,84 @@ function buildFlora(cfg) {
   }
   const rockGeo = new THREE.IcosahedronGeometry(0.9, 0); rockGeo.scale(1.15, 0.75, 1);
   makeInstanced(rockGeo, flat(pal.rock, 0.98), rockPts, pt => ground(pt) + 0.25 * pt.s, 0.95);
+  buildBeacon(cfg);
+}
+
+// The one plant with red leaves — the landmark you signal a ship from. Built
+// from the same geometry as its neighbours so it reads as one of them at a
+// glance, and only the colour marks it out.
+let beaconPos = { x: 0, z: 0 };
+function buildBeacon(cfg) {
+  const b = cfg.beacon;
+  const x = Math.cos(b.a) * b.r, z = Math.sin(b.a) * b.r;
+  beaconPos = { x, z };
+  const y = terrainH(x, z) - 0.08;
+  const hot = new THREE.MeshStandardMaterial({ color: b.leaf, flatShading: true, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+  hot.emissive.setHex(b.leaf); hot.emissiveIntensity = 0.22; // stays findable after dark
+  const bark = new THREE.MeshStandardMaterial({ color: cfg.pal.trunk, flatShading: true, roughness: 0.9, metalness: 0 });
+  const add = (geo, mat, px, py, pz, rot = 0) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(px, py, pz); m.rotation.y = rot; m.castShadow = true;
+    world.add(m); return m;
+  };
+  if (cfg.flora === "cannabis") {
+    add(new THREE.CylinderGeometry(0.14, 0.32, 6.2, 6), bark, x, y + 3.1, z);
+    const leaf = makeFanLeaf();
+    for (let t = 0; t < 6; t++) {
+      const up = 0.16 + (t / 5) * 0.76;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + t * 0.8;
+        const m = add(leaf, hot, x, y + up * 6.2, z, -a);
+        m.scale.setScalar(3.2 - up * 1.5);
+      }
+    }
+    const cola = new THREE.IcosahedronGeometry(0.46, 0); cola.scale(0.8, 1.7, 0.8);
+    add(cola, hot, x, y + 6.3, z);
+  } else {
+    add(new THREE.CylinderGeometry(0.22, 0.32, 1.5, 6), bark, x, y + 0.7, z);
+    const crown = new THREE.IcosahedronGeometry(1.9, 0); crown.scale(1, 0.85, 1);
+    add(crown, hot, x, y + 2.6, z);
+    const crown2 = new THREE.IcosahedronGeometry(1.2, 0);
+    add(crown2, hot, x + 0.9, y + 1.9, z - 0.5);
+  }
+  colliders.push({ x, z, r: 0.8 });
+}
+
+// ---------- the ship ----------
+// A classic saucer: two shallow cones back to back, a banded rim, a glass
+// bubble and three legs. Kept out of `world` so a planet rebuild mid-flight
+// can't dispose the thing the player is sitting in.
+function buildShip() {
+  const g = new THREE.Group();
+  const M = (c, r = 0.4, m = 0.55) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: r, metalness: m });
+  const hull = M(0xc9d2dc, 0.3, 0.65), trim = M(0xef4b5d, 0.5, 0.25), leg = M(0x6a7480, 0.6, 0.5);
+  const glass = new THREE.MeshStandardMaterial({ color: 0x9fe4f0, flatShading: true, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.55 });
+  const lamp = new THREE.MeshStandardMaterial({ color: 0xfff3b0, flatShading: true, roughness: 1, metalness: 0 });
+  lamp.emissive.setHex(0xffd23f); lamp.emissiveIntensity = 1.4;
+  const put = (geo, mat, y, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.rotation.x = rx; m.castShadow = true; g.add(m); return m; };
+  put(new THREE.ConeGeometry(1.7, 0.8, 12), hull, 0.4);
+  put(new THREE.ConeGeometry(1.7, 0.6, 12), hull, -0.3, Math.PI);
+  put(new THREE.TorusGeometry(1.68, 0.13, 6, 18), trim, 0, Math.PI / 2);
+  put(new THREE.SphereGeometry(0.66, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), glass, 0.72);
+  for (let i = 0; i < 8; i++) { // underside landing lights
+    const a = (i / 8) * Math.PI * 2;
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), lamp);
+    l.position.set(Math.cos(a) * 1.15, -0.42, Math.sin(a) * 1.15);
+    g.add(l);
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.5;
+    const L = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 1.0, 5), leg);
+    L.position.set(Math.cos(a) * 0.95, -0.78, Math.sin(a) * 0.95);
+    L.rotation.set(Math.cos(a) * -0.32, 0, Math.sin(a) * 0.32);
+    L.castShadow = true; g.add(L);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.1, 6), leg);
+    foot.position.set(Math.cos(a) * 1.25, -1.25, Math.sin(a) * 1.25);
+    g.add(foot);
+  }
+  g.visible = false;
+  scene.add(g);
+  return g;
 }
 
 function buildWorld(idx) {
@@ -550,7 +628,7 @@ function setPreviewVisible(v) { for (const r of previewRigs) r.group.visible = v
 
 // ---------- input (physical codes §1; gamepad; pointer lock) ----------
 const keys = new Set();
-const BIND = { KeyW: "f", KeyS: "b", KeyA: "l", KeyD: "r", ArrowUp: "f", ArrowDown: "b", ArrowLeft: "l", ArrowRight: "r", ShiftLeft: "sprint", ShiftRight: "sprint", Space: "jump", KeyR: "restart", KeyC: "chchar", KeyM: "mute", Digit1: "c1", Digit2: "c2", Digit3: "c3", Digit4: "c4" };
+const BIND = { KeyW: "f", KeyS: "b", KeyA: "l", KeyD: "r", ArrowUp: "f", ArrowDown: "b", ArrowLeft: "l", ArrowRight: "r", ShiftLeft: "sprint", ShiftRight: "sprint", Space: "jump", KeyR: "restart", KeyC: "chchar", KeyM: "mute", KeyE: "use", Digit1: "c1", Digit2: "c2", Digit3: "c3", Digit4: "c4" };
 addEventListener("keydown", e => {
   if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON")) return; // typing initials / focused button
   const c = BIND[e.code];
@@ -558,6 +636,7 @@ addEventListener("keydown", e => {
   if (c === "restart") { if (!e.repeat && (state === "play" || state === "over" || state === "menu")) startPlay(); e.preventDefault(); return; }
   if (c === "chchar") { if (!e.repeat && state !== "select") gotoSelect(); return; }
   if (c === "mute") { if (!e.repeat) toggleMute(); return; }
+  if (c === "use") { if (!e.repeat) usePressed = true; return; }
   if (c[0] === "c" && c.length === 2) { // c1..cN — number keys pick a hero
     const i = +c[1] - 1;
     if (state === "select" && i < CHAR_IDS.length) pickCharacter(CHAR_IDS[i]);
@@ -608,6 +687,9 @@ function gamepadInput(out) {
     const jb = gp.buttons[0] && gp.buttons[0].pressed;
     if (jb && !out._jump) out.jump = true; // edge-triggered, so holding A is one jump
     out._jump = jb;
+    const ub = gp.buttons[2] && gp.buttons[2].pressed; // square / X — interact
+    if (ub && !out._use) usePressed = true;
+    out._use = ub;
     const start = gp.buttons[9] && gp.buttons[9].pressed;
     if (start && !out._start) out.restart = true; // edge-triggered
     out._start = start;
@@ -798,7 +880,10 @@ const el = {
   overlay: document.getElementById("overlay"), card: document.getElementById("card"),
   cycleLabel: document.getElementById("cycleLabel"), cycleFill: document.getElementById("cycleFill"),
   cycleDot: document.getElementById("cycleDot"), dev: document.getElementById("dev"),
+  prompt: document.getElementById("prompt"), fade: document.getElementById("fade"),
 };
+el.prompt.addEventListener("click", ev => { ev.stopPropagation(); usePressed = true; }); // touch/mouse route
+el.prompt.addEventListener("touchstart", ev => { ev.preventDefault(); ev.stopPropagation(); usePressed = true; }, { passive: false });
 el.energyLabel.textContent = STR.energy;
 if (DEV) el.dev.style.display = "block";
 
@@ -918,6 +1003,13 @@ let best = 0; // best GUMMY COUNT from a single run (not survival time)
 try { best = +(localStorage.getItem("drops_best_gummies") || 0); } catch (e) {}
 function resetRun() {
   runCount++;
+  // every run starts back on the isle, and any trip in progress is torn down —
+  // otherwise dying mid-flight leaves the ship hovering and the hero invisible
+  travel = { phase: "none", t: 0, to: 0 };
+  usePressed = false;
+  ship.visible = false;
+  if (rig) { rig.group.visible = true; rig.group.scale.setScalar(1); }
+  if (planet !== 0) buildWorld(0);
   layoutNodes(BASE_SEED + runCount - 1);
   bar = CFG.barMax; score = 0; survived = START_T; simT = START_T; collected = 0;
   px = 0; pz = 0; py = terrainH(0, 0); vx = 0; vz = 0; vy = 0; jumpY = 0; grounded = true;
@@ -1095,8 +1187,107 @@ function updateSky(phase) {
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1), tmpE = new THREE.Euler();
 const padState = { gx: 0, gy: 0, sprint: false, jump: false, restart: false };
 let botWish = null;
+// ---------- interplanetary travel ----------
+// A small cutscene state machine. "landing" and "ready" leave the player in
+// control so they can watch the ship come down and walk to it; everything from
+// "board" onwards is locked, and the planet swap itself happens at the one
+// instant the screen is fully white.
+const TRAVEL = { land: 1.8, board: 0.8, ascend: 1.6, descend: 1.8, arrive: 0.7, fade: 0.7 };
+const INTERACT_R = 4.2, SHIP_REST = 1.45, SHIP_HIGH = 46;
+const ship = buildShip();
+let travel = { phase: "none", t: 0, to: 0 };
+const shipPos = { x: 0, y: 0, z: 0 };
+const shipSpot = () => ({ x: beaconPos.x + 3.6, z: beaconPos.z + 0.6 });
+let usePressed = false;
+
+const nearBeacon = () => Math.hypot(px - beaconPos.x, pz - beaconPos.z) < INTERACT_R;
+const nearShip = () => Math.hypot(px - shipPos.x, pz - shipPos.z) < INTERACT_R;
+function promptLabel() {
+  if (state !== "play") return null;
+  if (travel.phase === "none" && nearBeacon()) return STR.callShip;
+  if (travel.phase === "ready" && nearShip()) return STR.boardShip;
+  return null;
+}
+function tryInteract() {
+  if (state !== "play" || falling) return;
+  if (travel.phase === "none" && nearBeacon()) {
+    const s = shipSpot();
+    shipPos.x = s.x; shipPos.z = s.z; shipPos.y = terrainH(s.x, s.z) + SHIP_HIGH;
+    travel = { phase: "landing", t: 0, to: (planet + 1) % PLANETS.length };
+    ship.visible = true;
+  } else if (travel.phase === "ready" && nearShip()) {
+    travel.phase = "board"; travel.t = 0;
+  }
+}
+// returns true while the cutscene owns the camera and the player has no control
+function stepTravel(dt) {
+  if (travel.phase === "none") return false;
+  travel.t += dt;
+  const ground = terrainH(shipPos.x, shipPos.z);
+  const ease = k => 1 - (1 - k) * (1 - k);
+  switch (travel.phase) {
+    case "landing": {
+      const k = Math.min(1, travel.t / TRAVEL.land);
+      shipPos.y = ground + SHIP_HIGH + (SHIP_REST - SHIP_HIGH) * ease(k);
+      if (k >= 1) { travel.phase = "ready"; travel.t = 0; }
+      return false; // free to walk over
+    }
+    case "ready":
+      shipPos.y = ground + SHIP_REST + Math.sin(simT * 1.6) * 0.06;
+      return false;
+    case "board":
+      shipPos.y = ground + SHIP_REST + Math.sin(simT * 1.6) * 0.06;
+      if (travel.t >= TRAVEL.board) { travel.phase = "ascend"; travel.t = 0; }
+      return true;
+    case "ascend": {
+      const k = Math.min(1, travel.t / TRAVEL.ascend);
+      shipPos.y = ground + SHIP_REST + (SHIP_HIGH - SHIP_REST) * k * k;
+      if (k >= 1) { // screen is fully white here — swap the world behind it
+        buildWorld(travel.to);
+        layoutNodes(BASE_SEED + runCount - 1); // colliders moved, so re-place the gummies
+        const s = shipSpot();
+        shipPos.x = s.x; shipPos.z = s.z;
+        px = s.x; pz = s.z; py = terrainH(px, pz);
+        vx = 0; vz = 0; vy = 0; jumpY = 0; grounded = true; jumpsLeft = CFG.jumps;
+        travel.phase = "descend"; travel.t = 0;
+      }
+      return true;
+    }
+    case "descend": {
+      const k = Math.min(1, travel.t / TRAVEL.descend);
+      const g2 = terrainH(shipPos.x, shipPos.z);
+      shipPos.y = g2 + SHIP_HIGH + (SHIP_REST - SHIP_HIGH) * ease(k);
+      if (k >= 1) { travel.phase = "arrive"; travel.t = 0; }
+      return true;
+    }
+    case "arrive":
+      shipPos.y = ground + SHIP_REST;
+      if (travel.t >= TRAVEL.arrive) { // step out beside the ship and hand control back
+        px = shipPos.x - 2.6; pz = shipPos.z;
+        py = terrainH(px, pz);
+        travel = { phase: "none", t: 0, to: 0 };
+        ship.visible = false;
+      }
+      return true;
+  }
+  return false;
+}
+// 0 → 1 → 0 across the swap, so the rebuild never happens on screen
+function travelFade() {
+  if (travel.phase === "ascend") return Math.min(1, Math.max(0, (travel.t - (TRAVEL.ascend - TRAVEL.fade)) / TRAVEL.fade));
+  if (travel.phase === "board") return 0;
+  if (travel.phase === "descend") return Math.max(0, 1 - travel.t / TRAVEL.fade);
+  return 0;
+}
+
 function step(dt) {
-  simT += dt; survived += dt;
+  simT += dt;
+  if (usePressed) { usePressed = false; tryInteract(); }
+  if (stepTravel(dt)) { // the ship carries the camera; nothing else ticks
+    px = shipPos.x; pz = shipPos.z; py = shipPos.y - SHIP_REST;
+    return;
+  }
+  survived += dt;
 
   // --- input → wish direction (camera-relative) ---
   gamepadInput(padState);
@@ -1343,6 +1534,33 @@ function present(realDt) {
     rig.group.rotation.x = (danceT > 0 ? 0 : Math.min(1, Math.hypot(vx, vz) / CFG.sprint) * 0.14);
   }
 
+  // ship: hovers on its own axis; the hero shrinks into it while boarding and
+  // stays hidden until they step back out the far side
+  if (ship.visible) {
+    ship.position.set(shipPos.x, shipPos.y, shipPos.z);
+    ship.rotation.y += realDt * (travel.phase === "ready" ? 0.35 : 1.1);
+    const tilt = travel.phase === "landing" || travel.phase === "descend" ? 0.06 : 0;
+    ship.rotation.z = Math.sin(performance.now() * 0.0016) * tilt;
+  }
+  if (rig) {
+    const ph = travel.phase;
+    if (ph === "board") {
+      const k = Math.min(1, travel.t / TRAVEL.board);
+      player.position.lerp(tmpV2.set(shipPos.x, shipPos.y, shipPos.z), k * 0.5);
+      rig.group.scale.setScalar(Math.max(0.001, 1 - k));
+      rig.group.visible = k < 0.98;
+    } else if (ph === "ascend" || ph === "descend") {
+      rig.group.visible = false;
+    } else if (!rig.group.visible || rig.group.scale.x < 0.999) {
+      rig.group.visible = true;
+      rig.group.scale.setScalar(1);
+    }
+  }
+  el.fade.style.opacity = travelFade();
+  const label = promptLabel();
+  el.prompt.textContent = label || "";
+  el.prompt.style.display = label ? "block" : "none";
+
   // gummies: wiggle (squash-stretch + wobble spin); inactive hidden
   for (let i = 0; i < nodePts.length; i++) {
     const n = nodePts[i], on = nodeState[i].active;
@@ -1549,7 +1767,10 @@ if (DEV || SMOKE) {
       return { camYaw, camPitch, logoYaw, logoPos: logoSprite ? logoSprite.position.toArray() : null, camPos: camera.position.toArray(), px, pz, local, inView,
         opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor,
         simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state,
-        jumpY, vy, grounded, jumpsLeft, falling, sinkT, pr: Math.hypot(px, pz) };
+        jumpY, vy, grounded, jumpsLeft, falling, sinkT, pr: Math.hypot(px, pz),
+        planet: PLANETS[planet].id, gravity: P().gravity, travel: travel.phase,
+        shipY: +shipPos.y.toFixed(2), shipVisible: ship.visible,
+        heroVisible: rig ? rig.group.visible : null, beacon: beaconPos };
     },
     // rebuild the world in place — the mechanic the travel route will use
     planet: (i = (planet + 1) % PLANETS.length) => {

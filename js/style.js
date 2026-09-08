@@ -85,6 +85,7 @@ export const PLANETS = [
     gravity: 1,
     flora: "temperate",
     waterEmissive: 0x0d3a42,
+    beacon: { a: 0.65, r: 21, leaf: 0xd8392f }, // the red-leafed tree you signal from
   },
   {
     id: "haze",
@@ -102,6 +103,7 @@ export const PLANETS = [
     gravity: 0.38, // a double jump clears roughly two and a half heroes here
     flora: "cannabis",
     waterEmissive: 0x241a4a,
+    beacon: { a: 2.45, r: 21, leaf: 0xe0447c },
   },
 ];
 

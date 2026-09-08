@@ -31,6 +31,13 @@ npm run dev            # http://localhost:8787
   - **Daytime capture** → your hero locks into a signature boogie with confetti.
   - **Night capture** → dazzling sky show: flaring stars, comets, colorful
     firework explosions.
+- **Travel between planets.** One plant on each world has red leaves — walk up
+  to it and a prompt appears (**E**, a controller face button, or tap it). A
+  saucer drops out of the sky; walk into it and press again to board, and it
+  flies you to the other planet. **Hazy Acres** runs at 0.38 gravity with giant
+  cannabis flora: a double jump clears about two and a half heroes there, with
+  three seconds of hang time. Each planet has its own red plant, so the trip
+  works both ways. Dying anywhere returns you to the isle for the next run.
 - **Leap off the island to end a run.** The shoreline blocks you on foot, but
   jump as you reach it and you sail clean over — a committed arc out to sea
   with no way to steer back, ending in a splashdown. Your score banks exactly
