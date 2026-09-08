@@ -120,6 +120,16 @@ Two rules make it work, and both matter:
 A platform's footprint (`topR`) is deliberately tighter than its push-out
 radius, so you can't perch on the lip of a rounded canopy.
 
+A share of the gummies (`CFG.perchNodes`) sit **on** those platforms. Which
+platforms qualify is computed per planet from the double-jump height
+(`jumpV² / 2g × 1.78`, the measured double-jump gain), so a perch is never set
+somewhere that planet's gravity can't reach — rocks on the isle, toadstool caps
+under Ring Reach's 0.25 g, and never within 14 units of spawn, so the opening
+gummy is always a plain walk. Perched nodes also carry a height test on capture;
+without it you would sweep them off a cap by strolling underneath. Ground nodes
+keep the old height-blind rule, so nothing about them changed.
+
+`__fx.nodes()` lists every gummy with its height and whether it is perched.
 `__fx.platforms()` lists the landable surfaces nearest the hero and
 `__fx.warp(x, z, h)` drops them at a spot — together they make this testable
 without wandering the island hoping to find a rock.

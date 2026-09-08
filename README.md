@@ -53,6 +53,12 @@ npm run dev            # http://localhost:8787
   with no way to steer back, ending in a splashdown. Your score banks exactly
   as it does with 🏁. Spend the air-jump mid-leap for extra hang time and a
   longer flight.
+- **Some gummies sit up on rocks and canopies** — you can jump onto rocks, pine
+  tips, leafy crowns and toadstool caps, and a share of the gummies spawn on
+  them. Which ones are used is worked out per planet from that world's jump
+  height, so a perched gummy is always reachable where it spawns, and never sits
+  near your starting point. Toadstool caps under Ring Reach's 0.25 gravity are
+  the best of it — you can hop from cap to cap.
 - **Switching heroes mid-run keeps your run** (score, position, clock).
 - The **Drops logo** floats in the far sky and glows brighter at night.
 - Survive the day/night cycle; the power bar always drains, sprint drains faster.

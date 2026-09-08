@@ -11,7 +11,7 @@ import { makeMusic } from "./music.js";
 // ---------- config (design/thresholds.md) ----------
 const CFG = {
   islandR: 60, playableR: 50.5, spawnMargin: 8, // hard wall on dry sand — no wading
-  spawnPoints: 30, activeNodes: 12, respawn: 10,
+  spawnPoints: 30, activeNodes: 12, respawn: 10, perchNodes: 8,
   barMax: 100, drain: 1.6, sprintMult: 2.5, refill: 20,
   walk: 5, sprint: 8, collectR: 1.45,
   dayLen: 120, jumpV: 4.6, gravity: 12, jumps: 2, jump2Mult: 0.88,
@@ -506,7 +506,26 @@ function layoutNodes(seed) {
     const a = logicRng() * Math.PI * 2, r = 8 + logicRng() * 42;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (nodePts.every(q => (q.x - x) ** 2 + (q.z - z) ** 2 > 36) &&
-        colliders.every(c => (c.x - x) ** 2 + (c.z - z) ** 2 > 5.3)) nodePts.push({ x, z });
+        colliders.every(c => (c.x - x) ** 2 + (c.z - z) ** 2 > 5.3)) nodePts.push({ x, z, y: terrainH(x, z) });
+  }
+  // Move a share of them up onto platforms, so the double jump has a point.
+  // Only platforms actually reachable from the ground on THIS planet qualify —
+  // a rock on the isle, a toadstool cap under Ring Reach's 0.25 gravity — and
+  // never near spawn, so the opening gummy is always a simple walk.
+  const reach = (CFG.jumpV ** 2 / (2 * CFG.gravity * P().gravity)) * 1.78 * 0.85;
+  const perches = colliders.filter(c => c.top !== undefined &&
+    c.top - terrainH(c.x, c.z) <= reach && Math.hypot(c.x, c.z) > 14 &&
+    Math.hypot(c.x, c.z) < CFG.playableR - CFG.spawnMargin);
+  for (let i = perches.length - 1; i > 0; i--) { // shuffle on the run seed
+    const j = (logicRng() * (i + 1)) | 0;
+    [perches[i], perches[j]] = [perches[j], perches[i]];
+  }
+  const far = [...nodePts.keys()].sort((a, b) =>
+    (nodePts[b].x ** 2 + nodePts[b].z ** 2) - (nodePts[a].x ** 2 + nodePts[a].z ** 2));
+  const want = Math.min(CFG.perchNodes, perches.length, far.length);
+  for (let i = 0; i < want; i++) {
+    const c = perches[i];
+    nodePts[far[i]] = { x: c.x, z: c.z, y: c.top, perched: true };
   }
   // shuffled round-robin flavor deal — every one of the 11 colors spawns
   for (let i = 0; i < nodePts.length; i++) {
@@ -1485,6 +1504,10 @@ function step(dt) {
   for (let i = 0; i < nodePts.length; i++) {
     if (!nodeState[i].active) continue;
     const dx = px - nodePts[i].x, dz = pz - nodePts[i].z;
+    // perched ones also need you up at their level — otherwise you would sweep
+    // them off a toadstool cap by strolling underneath it. Ground gummies keep
+    // the old height-blind rule, so nothing about them changes.
+    if (nodePts[i].perched && Math.abs((py + jumpY) - nodePts[i].y) > 2.2) continue;
     if (dx * dx + dz * dz < CFG.collectR * CFG.collectR) {
       nodeState[i].active = false;
       respawnQ.push({ at: simT + CFG.respawn, idx: i });
@@ -1691,7 +1714,7 @@ function present(realDt) {
   for (let i = 0; i < nodePts.length; i++) {
     const n = nodePts[i], on = nodeState[i].active;
     if (on) {
-      const h = terrainH(n.x, n.z) + 0.55 + Math.sin(simT * 2 + i * 1.7) * 0.1;
+      const h = n.y + 0.55 + Math.sin(simT * 2 + i * 1.7) * 0.1;
       tmpV.set(n.x, h, n.z);
       tmpE.set(Math.sin(simT * 6.1 + i * 2.3) * 0.14, simT * 1.4 + i, Math.sin(simT * 7.3 + i) * 0.12);
       tmpQ.setFromEuler(tmpE);
@@ -1914,6 +1937,11 @@ if (DEV || SMOKE) {
       grounded = h <= 0; vx = 0; vz = 0;
       return { px, pz, py, jumpY };
     },
+    // QA: where the gummies are, and which of them are up on something
+    nodes: () => nodePts.map((n, i) => ({ i, x: +n.x.toFixed(1), z: +n.z.toFixed(1),
+      y: +n.y.toFixed(2), ground: +terrainH(n.x, n.z).toFixed(2),
+      perched: !!n.perched, active: nodeState[i].active,
+      d: +Math.hypot(n.x - px, n.z - pz).toFixed(1) })),
     // QA: the landable surfaces on this planet, nearest first
     platforms: (n = 5) => colliders.filter(c => c.top !== undefined)
       .map(c => ({ x: +c.x.toFixed(1), z: +c.z.toFixed(1), top: +c.top.toFixed(2), r: +c.topR.toFixed(2),
