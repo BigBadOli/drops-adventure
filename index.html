@@ -58,6 +58,12 @@
   #cycleBar { width:90px; height:5px; border-radius:3px; background:rgba(255,255,255,.3);
     overflow:hidden; }
   #cycleFill { height:100%; width:0%; background:#fff; border-radius:3px; }
+  /* current planet, tucked under the day/night readout */
+  #planetTag { position:absolute; top:60px; left:14px; padding:8px 14px; font-size:12px;
+    display:flex; align-items:baseline; gap:8px; letter-spacing:.08em;
+    text-shadow:0 1px 4px rgba(80,0,60,.4); }
+  #planetTag .ptLabel { font-size:9.5px; letter-spacing:.18em; text-transform:uppercase; opacity:.8; }
+  #planetTag b { color:#fff45e; font-size:13px; letter-spacing:.04em; white-space:nowrap; }
   #energyWrap { position:absolute; left:50%; bottom:26px; transform:translateX(-50%);
     width:min(420px, 70vw); padding:10px 16px 13px; }
   #energyLabel { font-size:11px; letter-spacing:.26em; margin-bottom:6px; font-weight:800;
@@ -240,6 +246,7 @@
 <div id="hud">
   <div id="lookLayer"></div>
   <div id="cycle" class="panel"><span id="cycleDot"></span><span id="cycleLabel"></span><div id="cycleBar"><div id="cycleFill"></div></div></div>
+  <div id="planetTag" class="panel"><span class="ptLabel">Current planet</span><b id="planetName"></b></div>
   <div id="stats" class="panel"></div>
   <div id="energyWrap" class="panel">
     <div id="energyLabel"></div>

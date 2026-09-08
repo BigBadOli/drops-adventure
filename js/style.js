@@ -170,7 +170,7 @@ export const PLANETS = [
     waterEmissive: 0x5c1030,
     beacon: { a: 4.1, r: 21, leaf: 0xfff04d },
     // this world's own ring system, seen from the surface as a band overhead
-    arc: { radius: 330, tube: 34, color: 0xf5e3b0, yaw: 0.7, tilt: 0.34 },
+    arc: { radius: 340, tube: 26, color: 0xf5e3b0, yaw: 0.7, tilt: 0.34 },
     bodies: [
       { r: 13, dist: 330, az: 0.4, el: 0.62, color: 0xffd98a, emissive: 0x3a2a10 },
       { r: 26, dist: 400, az: 3.5, el: 0.24, color: 0xa85fd0, emissive: 0x2a1440 },

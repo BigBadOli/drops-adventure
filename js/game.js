@@ -193,14 +193,15 @@ function buildSkyBodies(cfg) {
   // A world with its own rings sees them from underneath as a band crossing the
   // sky. This has to be a torus, not a flat annulus: the band is centred on the
   // camera, so a flat ring would be seen exactly edge-on and render as a
-  // hairline. The tube gives it real width from the inside. Only the upper arc
-  // is built — the rest would sit below the horizon.
+  // hairline. The tube gives it real width from the inside. It runs the full
+  // circle so the band only ever ends where the horizon cuts it — a partial arc
+  // leaves a hard sliced edge hanging in open sky.
   if (cfg.arc) {
     const a = cfg.arc;
     const m = new THREE.MeshStandardMaterial({ color: a.color, roughness: 1, metalness: 0,
       fog: false, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
     m.emissive.setHex(a.color); m.emissiveIntensity = 0.4;
-    const geo = new THREE.TorusGeometry(a.radius, a.tube, 6, 120, Math.PI * 1.45);
+    const geo = new THREE.TorusGeometry(a.radius, a.tube, 6, 140); // full ring — a partial arc ends in a visible cut
     const arc = new THREE.Mesh(geo, m);
     arc.rotation.set(a.tilt, a.yaw, 0);
     skyBodies.add(arc);
@@ -306,13 +307,20 @@ function buildFlora(cfg) {
     world.add(m);
     return m;
   }
-  function makeInstanced(geo, mat, pts, yFn, collideR) {
+  // topFn, when given, makes this swarm landable: it returns the world height of
+  // the surface you can stand on. The footprint is deliberately tighter than the
+  // push-out radius, so you can't perch on the very lip of a rounded canopy.
+  function makeInstanced(geo, mat, pts, yFn, collideR, topFn) {
     const mats = pts.map(pt => {
       dummy.position.set(pt.x, yFn(pt), pt.z);
       dummy.rotation.set(0, pt.rot, 0);
       dummy.scale.setScalar(pt.s);
       dummy.updateMatrix();
-      if (collideR) colliders.push({ x: pt.x, z: pt.z, r: collideR * pt.s });
+      if (collideR || topFn) {
+        const c = { x: pt.x, z: pt.z, r: (collideR || 0) * pt.s };
+        if (topFn) { c.top = topFn(pt); c.topR = (topFn.radius || collideR || 1) * pt.s * 0.82; }
+        colliders.push(c);
+      }
       return dummy.matrix.clone();
     });
     return makeInstancedRaw(geo, mat, mats);
@@ -355,7 +363,8 @@ function buildFlora(cfg) {
     makeInstanced(new THREE.CylinderGeometry(0.3, 0.46, 3.0, 7), flat(pal.trunk), capPts, pt => ground(pt) + 1.5 * pt.s, 0.6);
     const capGeo = new THREE.SphereGeometry(1.55, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     capGeo.scale(1, 0.72, 1);
-    makeInstanced(capGeo, flat(pal.pine), capPts, pt => ground(pt) + 2.9 * pt.s, 0);
+    makeInstanced(capGeo, flat(pal.pine), capPts, pt => ground(pt) + 2.9 * pt.s, 0,
+      Object.assign(pt => ground(pt) + 4.0 * pt.s, { radius: 1.5 })); // toadstool caps — the best platforms in the game
     const spotGeo = new THREE.SphereGeometry(0.2, 7, 5); spotGeo.scale(1, 0.42, 1);
     const spotMats = [];
     for (const pt of capPts) {
@@ -373,14 +382,17 @@ function buildFlora(cfg) {
     makeInstancedRaw(spotGeo, flat(pal.trunk, 0.8), spotMats); // cream, not cap-pink
   } else {
     const pinePts = scatter(52, 8, 47, 3.2), leafPts = scatter(34, 8, 46, 3.4);
-    makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(pal.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75);
+    makeInstanced(new THREE.ConeGeometry(1.15, 2.8, 7), flat(pal.pine), pinePts, pt => ground(pt) + 1.9 * pt.s, 0.75,
+      Object.assign(pt => ground(pt) + 3.2 * pt.s, { radius: 0.5 })); // pine tip
     makeInstanced(new THREE.CylinderGeometry(0.16, 0.24, 1.0, 6), flat(pal.trunk), pinePts, pt => ground(pt) + 0.45 * pt.s, 0);
     const leafGeo = new THREE.IcosahedronGeometry(1.5, 0); leafGeo.scale(1, 0.85, 1);
-    makeInstanced(leafGeo, flat(pal.leaf), leafPts, pt => ground(pt) + 1.95 * pt.s, 0.75);
+    makeInstanced(leafGeo, flat(pal.leaf), leafPts, pt => ground(pt) + 1.95 * pt.s, 0.75,
+      Object.assign(pt => ground(pt) + 3.2 * pt.s, { radius: 1.1 })); // leafy crown
     makeInstanced(new THREE.CylinderGeometry(0.18, 0.26, 1.1, 6), flat(pal.trunk), leafPts, pt => ground(pt) + 0.5 * pt.s, 0);
   }
   const rockGeo = new THREE.IcosahedronGeometry(0.9, 0); rockGeo.scale(1.15, 0.75, 1);
-  makeInstanced(rockGeo, flat(pal.rock, 0.98), rockPts, pt => ground(pt) + 0.25 * pt.s, 0.95);
+  makeInstanced(rockGeo, flat(pal.rock, 0.98), rockPts, pt => ground(pt) + 0.25 * pt.s, 0.95,
+    Object.assign(pt => ground(pt) + 0.9 * pt.s, { radius: 0.95 })); // rocks are the everyday platform
   buildBeacon(cfg);
 }
 
@@ -959,6 +971,7 @@ const el = {
   cycleLabel: document.getElementById("cycleLabel"), cycleFill: document.getElementById("cycleFill"),
   cycleDot: document.getElementById("cycleDot"), dev: document.getElementById("dev"),
   prompt: document.getElementById("prompt"), fade: document.getElementById("fade"),
+  planetTag: document.getElementById("planetTag"), planetName: document.getElementById("planetName"),
 };
 el.prompt.addEventListener("click", ev => { ev.stopPropagation(); usePressed = true; }); // touch/mouse route
 el.prompt.addEventListener("touchstart", ev => { ev.preventDefault(); ev.stopPropagation(); usePressed = true; }, { passive: false });
@@ -1265,6 +1278,22 @@ function updateSky(phase) {
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(1, 1, 1), tmpE = new THREE.Euler();
 const padState = { gx: 0, gy: 0, sprint: false, jump: false, restart: false };
 let botWish = null;
+// Highest thing under the hero at (x, z): the terrain, or the top of a landable
+// collider they are at or above. The 0.35 tolerance lets you step up onto low
+// rocks rather than being stopped dead by them.
+function supportH(x, z, feetY) {
+  let h = terrainH(x, z);
+  for (let i = 0; i < colliders.length; i++) {
+    const c = colliders[i];
+    if (c.top === undefined || c.top <= h) continue;
+    if (feetY < c.top - 0.35) continue;          // below it — that's a wall, not a floor
+    const dx = x - c.x, dz = z - c.z;
+    if (dx * dx + dz * dz > c.topR * c.topR) continue;
+    if (c.top > h) h = c.top;
+  }
+  return h;
+}
+
 // ---------- interplanetary travel ----------
 // A small cutscene state machine. "landing" and "ready" leave the player in
 // control so they can watch the ship come down and walk to it; everything from
@@ -1395,9 +1424,13 @@ function step(dt) {
   }
   px += vx * dt; pz += vz * dt;
 
-  // colliders (trees/rocks) — circle push-out
+  // colliders (trees/rocks) — circle push-out, skipped once your feet clear the
+  // top of the thing, so an airborne hero passes over instead of being shoved
+  // sideways off a canopy they were about to land on
+  const feetY = py + jumpY;
   if (!falling) for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
+    if (c.top !== undefined && feetY > c.top - 0.2) continue;
     const dx = px - c.x, dz = pz - c.z, d2 = dx * dx + dz * dz, rr = c.r + 0.5;
     if (d2 < rr * rr && d2 > 1e-6) {
       const d = Math.sqrt(d2);
@@ -1490,7 +1523,22 @@ function step(dt) {
     heading += d * Math.min(1, 12 * dt);
   }
   walkCycle += speed2 * dt * 2.2;
-  if (!falling) py = terrainH(px, pz); // mid-leap py is driven by the fall, not the ground
+  // What is holding the hero up: the terrain, or the top of something they have
+  // landed on. World height (py + jumpY) is preserved whenever that support
+  // changes, so stepping off a rock starts a fall instead of teleporting down,
+  // and drifting over one lands you on it instead of passing through.
+  if (!falling) {
+    const feet = py + jumpY;
+    const sup = supportH(px, pz, feet);
+    if (grounded) {
+      if (py - sup > 0.3) { jumpY = py - sup; grounded = false; vy = 0; } // walked off an edge
+      py = sup;
+    } else {
+      jumpY = feet - sup;
+      py = sup;
+      if (jumpY <= 0) { jumpY = 0; vy = 0; grounded = true; jumpsLeft = CFG.jumps; }
+    }
+  }
 }
 
 // ---------- character animation (walk + per-style dance) ----------
@@ -1736,6 +1784,8 @@ function updateHUD(realDt) {
     ? (phase - NIGHT_A) / (NIGHT_B - NIGHT_A)
     : ((phase >= NIGHT_B ? phase - NIGHT_B : phase + (1 - NIGHT_B)) / DAY_LEN);
   el.cycleFill.style.width = `${Math.min(100, prog * 100).toFixed(1)}%`;
+  el.planetName.textContent = P().name;
+  el.planetTag.style.display = state === "play" || state === "menu" ? "flex" : "none";
   const dot = isNight ? "#8fa8d8" : "#ffd9a0";
   el.cycleDot.style.background = dot; el.cycleDot.style.boxShadow = `0 0 10px ${dot}`;
   el.stats.innerHTML = `${STR.score}: <b>${score}</b><br>${STR.time}: <b>${fmtTime(survived)}</b>${best > 0 ? `<br>${STR.best}: <b>${best}</b> 🍬` : ""}`;
@@ -1846,7 +1896,8 @@ if (DEV || SMOKE) {
       return { camYaw, camPitch, logoYaw, logoPos: logoSprite ? logoSprite.position.toArray() : null, camPos: camera.position.toArray(), px, pz, local, inView,
         opacity: logoSprite?.material.opacity, visible: logoSprite?.visible, aspect: camera.aspect, nightFactor,
         simT, phase: phaseOf(simT), isNight: isNightPhase(phaseOf(simT)), danceT, showT, best, audioState: audio.ctx?.state,
-        jumpY, vy, grounded, jumpsLeft, falling, sinkT, pr: Math.hypot(px, pz),
+        py, jumpY, vy, grounded, jumpsLeft, falling, sinkT, pr: Math.hypot(px, pz),
+        terrain: terrainH(px, pz), platforms: colliders.filter(c => c.top !== undefined).length,
         planet: PLANETS[planet].id, gravity: P().gravity, travel: travel.phase,
         shipY: +shipPos.y.toFixed(2), shipVisible: ship.visible,
         heroVisible: rig ? rig.group.visible : null, beacon: beaconPos };
@@ -1857,6 +1908,17 @@ if (DEV || SMOKE) {
       layoutNodes(BASE_SEED + runCount - 1); // colliders changed, so nodes must re-place
       return { planet: PLANETS[i].id, gravity: PLANETS[i].gravity, colliders: colliders.length };
     },
+    // QA: drop the hero at a spot (optionally in mid-air) to test landing
+    warp: (x, z, h = 0) => {
+      px = x; pz = z; py = terrainH(x, z); jumpY = h; vy = 0;
+      grounded = h <= 0; vx = 0; vz = 0;
+      return { px, pz, py, jumpY };
+    },
+    // QA: the landable surfaces on this planet, nearest first
+    platforms: (n = 5) => colliders.filter(c => c.top !== undefined)
+      .map(c => ({ x: +c.x.toFixed(1), z: +c.z.toFixed(1), top: +c.top.toFixed(2), r: +c.topR.toFixed(2),
+        d: +Math.hypot(c.x - px, c.z - pz).toFixed(1) }))
+      .sort((a, b) => a.d - b.d).slice(0, n),
     magnet: () => { // teleport onto the nearest active gummy (capture test)
       let bi = -1, bd = 1e9;
       for (let i = 0; i < nodePts.length; i++) {
