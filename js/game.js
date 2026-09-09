@@ -28,6 +28,26 @@ const NIGHT_A = 0.583, NIGHT_B = 0.94;
 function phaseOf(t) { return (t % CFG.dayLen) / CFG.dayLen; }
 function isNightPhase(phase) { return phase > NIGHT_A && phase < NIGHT_B; }
 const Q = new URLSearchParams(location.search);
+// Camera modes for A/B-ing a feel change. ?cam=wide is the framing change only
+// (same manual look); ?cam=auto adds the follow camera on top, which is what a
+// one-stick cabinet pad needs. Default is untouched.
+const CAM_MODES = {
+  classic: { pitch: 0.42, dist: 7.2, fov: 55, lookH: 1.55, follow: false },
+  wide:    { pitch: 0.16, dist: 9.5, fov: 64, lookH: 2.40, follow: false },
+  auto:    { pitch: 0.16, dist: 9.5, fov: 64, lookH: 2.40, follow: true },
+};
+const CAM = CAM_MODES[Q.get("cam")] || CAM_MODES.classic;
+const CAM_HOLD = 2.5;   // seconds the follow camera backs off after a manual look
+// The dead zone is the whole ballgame. Movement is camera-relative, so ANY
+// sustained input outside the dead zone makes the camera chase, which rotates
+// what "that direction" means, which makes you curve — you orbit at whatever
+// rate the camera chases. Inside the dead zone nothing chases and you walk
+// dead straight. So the dead zone has to cover every direction you want to be
+// able to hold. ?dead=<degrees> to taste: 34 steers like a car, 100 lets you
+// strafe and go diagonally in a straight line and only swings when you double
+// back on yourself.
+const CAM_DEAD = (+(Q.get("dead") || 34)) * Math.PI / 180;
+let camHold = 0, camChasing = false;
 const DEV = Q.has("dev");
 const SMOKE = Q.has("smoke");
 const IDLE = Q.has("idle"); // contrast route: bot stands still — must die
@@ -78,7 +98,7 @@ const DPR_CAP = 1.5; // §7.5
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xaadfee);
 scene.fog = new THREE.Fog(0xaadfee, FOG_NEAR, FOG_FAR);
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
+const camera = new THREE.PerspectiveCamera(CAM.fov, 1, 0.1, 500);
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, DPR_CAP);
   renderer.setPixelRatio(dpr);
@@ -795,7 +815,7 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => {
   const c = BIND[e.code]; if (c) keys.delete(c);
 });
-let camYaw = 0, camPitch = 0.42, locked = false;
+let camYaw = 0, camPitch = CAM.pitch, locked = false;
 const TOUCH = Q.has("touch") || "ontouchstart" in window || navigator.maxTouchPoints > 0; // ?touch forces the mobile control layout for QA
 if (TOUCH) document.body.classList.add("touch-ui"); // lifts the energy bar clear of the joystick/action buttons
 canvas.addEventListener("click", () => { if (state === "play" && !locked && !SMOKE && !TOUCH) canvas.requestPointerLock(); });
@@ -809,7 +829,7 @@ addEventListener("mousemove", e => {
   // cursor for uncapped turning. movementX/Y deltas work either way.
   if (state !== "play") return;
   if (!locked && !el.overlay.classList.contains("hidden")) return; // paused card up
-  camYaw -= (e.movementX || 0) * CFG.camSens;
+  camYaw -= (e.movementX || 0) * CFG.camSens; camHold = CAM_HOLD;
   camPitch = Math.min(1.15, Math.max(-0.3, camPitch + (e.movementY || 0) * CFG.camSens));
 });
 function gamepadInput(out) {
@@ -821,6 +841,7 @@ function gamepadInput(out) {
     out.gx = dz(gp.axes[0] || 0); out.gy = dz(gp.axes[1] || 0);
     camYaw -= dz(gp.axes[2] || 0) * 0.045;
     camPitch = Math.min(1.15, Math.max(-0.3, camPitch + dz(gp.axes[3] || 0) * 0.035));
+    if (dz(gp.axes[2] || 0) || dz(gp.axes[3] || 0)) camHold = CAM_HOLD;
     if (gp.buttons[7] && gp.buttons[7].value > 0.3) out.sprint = true;
     const jb = gp.buttons[0] && gp.buttons[0].pressed;
     if (jb && !out._jump) out.jump = true; // edge-triggered, so holding A is one jump
@@ -887,7 +908,7 @@ if (TOUCH) {
       e.preventDefault();
       const dx = t.clientX - lookX, dy = t.clientY - lookY;
       lookX = t.clientX; lookY = t.clientY;
-      camYaw -= dx * CFG.camSens * TOUCH_LOOK_SENS;
+      camYaw -= dx * CFG.camSens * TOUCH_LOOK_SENS; camHold = CAM_HOLD;
       camPitch = Math.min(1.15, Math.max(-0.3, camPitch + dy * CFG.camSens * TOUCH_LOOK_SENS));
     }
   }, { passive: false });
@@ -1157,7 +1178,7 @@ function resetRun() {
   // (or stuck) when the last run ended carries straight into the new one
   keys.clear(); touchMove.x = 0; touchMove.z = 0; touchSprint = false; touchJumpQueued = false;
   padState.gx = 0; padState.gy = 0; padState.sprint = false; padState.jump = false;
-  heading = 0; walkCycle = 0; camYaw = 0; camPitch = 0.42;
+  heading = 0; walkCycle = 0; camYaw = 0; camPitch = CAM.pitch; camHold = 0; camChasing = false;
   danceT = 0; showT = 0; showFxT = 0; confettiT = 0;
   respawnQ = [];
   // hook (§3.4): guarantee a gummy ~8 m ahead of spawn
@@ -1206,7 +1227,7 @@ function gotoSelect() { // hero picker; an active run is paused, not reset
   if (document.pointerLockElement) document.exitPointerLock();
   if (audio.music) audio.music.stop();
   setPreviewVisible(true);
-  if (!runActive) { camYaw = 0; camPitch = 0.42; }
+  if (!runActive) { camYaw = 0; camPitch = CAM.pitch; }
   showOverlay("select");
   updateButtons();
 }
@@ -1805,10 +1826,38 @@ function present(realDt) {
 
   if (state === "select") return; // select camera set above
 
+  // Follow camera. Movement is camera-relative, so chasing the hero's heading
+  // is a feedback loop: turn, camera turns, "left" now means somewhere else,
+  // and you orbit. Three things keep it stable — a dead zone so small
+  // corrections are ignored, hysteresis so it settles instead of hunting, and
+  // a rate that collapses when you are strafing or walking back at the camera,
+  // which is exactly when the loop would otherwise bite.
+  if (CAM.follow) {
+    camHold = Math.max(0, camHold - realDt);
+    const busy = state !== "play" || travel.phase !== "none" || falling || danceT > 0;
+    if (busy || camHold > 0) camChasing = false;
+    else {
+      let d = heading - camYaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      const moving = Math.hypot(vx, vz) > 1.0;
+      if (moving && !camChasing && Math.abs(d) > CAM_DEAD) camChasing = true;
+      if (camChasing) {
+        if (!moving || Math.abs(d) < Math.min(0.05, CAM_DEAD * 0.15)) camChasing = false;
+        else {
+          const rate = Math.abs(d) > 1.3 ? 0.5 : 1.8; // crawl when strafing/reversing
+          camYaw += Math.sign(d) * Math.min(Math.abs(d), rate * realDt);
+        }
+      }
+      // ease the tilt back to the mode's resting angle after a look-up
+      camPitch += (CAM.pitch - camPitch) * Math.min(1, 1.4 * realDt);
+    }
+  }
+
   // camera (pulls in when a tree/rock blocks the line of sight)
-  tmpV.set(px, py + jumpY + 1.55, pz);
+  tmpV.set(px, py + jumpY + CAM.lookH, pz);
   const cp = Math.cos(camPitch), sp = Math.sin(camPitch);
-  let camD = CFG.camDist;
+  let camD = CAM.dist;
   const dirX = Math.sin(camYaw) * cp, dirZ = Math.cos(camYaw) * cp;
   for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
