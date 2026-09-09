@@ -178,6 +178,34 @@ doesn't strand a hovering ship or an invisible hero.
 
 `__fx.planet(i)` rebuilds in place for QA; `?planet=1` boots straight there.
 
+## The camera
+
+The follow camera is the default (`CAM_MODES.auto` in `game.js`): wide framing
+— pitch 0.16, distance 9.5, fov 64, look-at at head + 2.4 — plus a camera that
+chases the hero's heading. `?cam=classic` restores the original; `?cam=wide` is
+the framing without the follow.
+
+**The dead zone is the whole design, not a polish value.** Movement is
+camera-relative, so any sustained input outside the dead zone makes the camera
+chase, which rotates what that direction means, which makes you curve — you
+orbit at whatever rate the camera chases. Slowing the chase only widens the
+circle; it never produces a straight line. Inside the dead zone nothing chases
+and you walk dead straight.
+
+The default 34° dead zone therefore means holding anything but forward carves a
+circle (measured: 29°/s, roughly a 10-unit radius). That was chosen **on
+purpose** after playing the alternatives. `?dead=100` genuinely walks straighter
+— forward, diagonal and sideways all measured 0° of camera movement — and feels
+worse, because the camera stops revealing the world and you end up locked to one
+bearing. The swinging is doing the work.
+
+A manual look suspends the follow for `CAM_HOLD` seconds and the tilt then eases
+back. Follow is off during the travel cutscene, the shoreline leap and dances.
+
+The camera pull-in is height-aware: a collider shorter than the sight line at
+that point is skipped. Without that, the lower camera gets yanked in by
+knee-high rocks.
+
 ## Known issue: gamepad on the hero-select screen
 
 The game already has gamepad support — `gamepadInput()` in `game.js` handles

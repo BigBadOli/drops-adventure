@@ -28,15 +28,18 @@ const NIGHT_A = 0.583, NIGHT_B = 0.94;
 function phaseOf(t) { return (t % CFG.dayLen) / CFG.dayLen; }
 function isNightPhase(phase) { return phase > NIGHT_A && phase < NIGHT_B; }
 const Q = new URLSearchParams(location.search);
-// Camera modes for A/B-ing a feel change. ?cam=wide is the framing change only
-// (same manual look); ?cam=auto adds the follow camera on top, which is what a
-// one-stick cabinet pad needs. Default is untouched.
+// The follow camera is the default. Chosen by playing all three: the swinging
+// is not a side effect to be minimised, it is doing the work — it keeps
+// revealing the world and the sky as you move. Damping it down (?dead=100)
+// technically walks straighter and feels worse, because you end up locked to
+// one bearing. ?cam=classic restores the original camera, ?cam=wide keeps the
+// wider framing but hands the look control back to you.
 const CAM_MODES = {
   classic: { pitch: 0.42, dist: 7.2, fov: 55, lookH: 1.55, follow: false },
   wide:    { pitch: 0.16, dist: 9.5, fov: 64, lookH: 2.40, follow: false },
   auto:    { pitch: 0.16, dist: 9.5, fov: 64, lookH: 2.40, follow: true },
 };
-const CAM = CAM_MODES[Q.get("cam")] || CAM_MODES.classic;
+const CAM = CAM_MODES[Q.get("cam")] || CAM_MODES.auto;
 const CAM_HOLD = 2.5;   // seconds the follow camera backs off after a manual look
 // The dead zone is the whole ballgame. Movement is camera-relative, so ANY
 // sustained input outside the dead zone makes the camera chase, which rotates
@@ -1864,6 +1867,11 @@ function present(realDt) {
     const rx = c.x - tmpV.x, rz = c.z - tmpV.z;
     const t = rx * dirX + rz * dirZ; // projection onto the view ray
     if (t < 1.0 || t > camD) continue;
+    // The sight line climbs from the hero to the camera, so anything shorter
+    // than the line at this point cannot be blocking it. Without this the
+    // camera is yanked in by knee-high rocks, which got much worse once the
+    // camera dropped closer to the ground.
+    if (c.blockTop !== undefined && c.blockTop < tmpV.y + sp * t) continue;
     const cx = tmpV.x + dirX * t, cz = tmpV.z + dirZ * t;
     const d2 = (c.x - cx) ** 2 + (c.z - cz) ** 2, rr = c.r + 1.0;
     if (d2 < rr * rr) camD = Math.max(2.2, Math.min(camD, t - rr));

@@ -33,6 +33,11 @@ and open one fresh.
 | Hazy Acres | `open "http://localhost:8787/?planet=1&t=30"` |
 | Ring Reach | `open "http://localhost:8787/?planet=2&t=30"` |
 
+## Camera
+
+The camera follows you automatically and shows plenty of sky — you never need to
+touch the look control. If you ever want the old one back, add `&cam=classic`.
+
 ## Bits you can add to any URL
 
 - `?t=30` — start at midday · `?t=88` — start at night
